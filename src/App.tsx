@@ -840,7 +840,6 @@ function App() {
               {isPreviewing && (
                 <>
                   <div className="preview-instructions">
-                    <span className="preview-badge">Position Recording Area</span>
                     <span className="preview-hint">Drag to move · Corners to resize</span>
                   </div>
                   {/* Resize handles */}

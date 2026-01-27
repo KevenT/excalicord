@@ -5,7 +5,7 @@
  * we show mobile users a nice landing page where they can send themselves a link.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './MobileLanding.css';
 
 function MobileLanding() {
@@ -14,6 +14,16 @@ function MobileLanding() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const appUrl = window.location.href;
+
+  // Override global overflow:hidden to allow scrolling on mobile
+  useEffect(() => {
+    document.body.style.overflow = 'auto';
+    document.documentElement.style.overflow = 'auto';
+    return () => {
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

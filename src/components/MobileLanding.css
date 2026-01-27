@@ -1,36 +1,35 @@
 /**
  * MobileLanding Styles
- * Aesthetic: Warm Studio - premium, inviting, mobile-optimized
+ * Aesthetic: Warm Studio - light theme, premium, inviting
  */
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fraunces:wght@600;700&display=swap');
 
 .mobile-landing {
   min-height: 100vh;
-  min-height: 100dvh; /* Dynamic viewport height for mobile */
-  background: #1c1917;
-  color: #fefcf9;
+  min-height: 100dvh;
+  background: #fefcf9;
+  color: #1c1917;
   font-family: 'DM Sans', -apple-system, sans-serif;
   position: relative;
   overflow-x: hidden;
+  overflow-y: auto;
 }
 
-/* Ambient gradient background */
+/* Subtle ambient background */
 .mobile-bg {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(120, 113, 108, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse 60% 40% at 70% 100%, rgba(168, 162, 158, 0.1) 0%, transparent 50%);
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(239, 68, 68, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 70% 100%, rgba(120, 113, 108, 0.05) 0%, transparent 50%);
   pointer-events: none;
 }
 
 .mobile-content {
   position: relative;
   z-index: 1;
-  padding: 32px 24px 24px;
-  min-height: 100vh;
-  min-height: 100dvh;
+  padding: 48px 24px 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -40,11 +39,10 @@
 
 /* Icon */
 .mobile-icon {
-  width: 52px;
-  height: 52px;
-  color: #fefcf9;
-  margin-bottom: 16px;
-  opacity: 0.95;
+  width: 56px;
+  height: 56px;
+  color: #1c1917;
+  margin-bottom: 20px;
 }
 
 .mobile-icon svg {
@@ -55,42 +53,20 @@
 /* Headlines */
 .mobile-headline {
   font-family: 'Fraunces', Georgia, serif;
-  font-size: 32px;
+  font-size: 36px;
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.02em;
   margin: 0 0 12px;
-  background: linear-gradient(180deg, #fefcf9 0%, #d6d3d1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #1c1917;
 }
 
 .mobile-subheadline {
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.5;
-  color: #a8a29e;
-  margin: 0 0 20px;
+  color: #57534e;
+  margin: 0 0 24px;
   max-width: 300px;
-}
-
-/* Feature pills */
-.mobile-features {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  margin-bottom: 20px;
-}
-
-.feature-pill {
-  padding: 6px 12px;
-  background: rgba(254, 252, 249, 0.08);
-  border: 1px solid rgba(254, 252, 249, 0.12);
-  border-radius: 100px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #d6d3d1;
 }
 
 /* Desktop notice */
@@ -98,12 +74,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  background: rgba(254, 252, 249, 0.05);
+  padding: 12px 18px;
+  background: #f5f5f4;
   border-radius: 12px;
-  font-size: 13px;
-  color: #a8a29e;
-  margin-bottom: 20px;
+  font-size: 14px;
+  color: #57534e;
+  margin-bottom: 24px;
 }
 
 .notice-icon {
@@ -118,7 +94,8 @@
 
 .form-label {
   font-size: 14px;
-  color: #d6d3d1;
+  font-weight: 500;
+  color: #44403c;
   margin-bottom: 12px;
 }
 
@@ -132,23 +109,23 @@
   flex: 1;
   min-width: 0;
   padding: 14px 16px;
-  background: rgba(254, 252, 249, 0.08);
-  border: 1.5px solid rgba(254, 252, 249, 0.15);
+  background: white;
+  border: 1.5px solid #e7e5e4;
   border-radius: 12px;
-  color: #fefcf9;
-  font-size: 16px; /* Prevents zoom on iOS */
+  color: #1c1917;
+  font-size: 16px;
   font-family: 'DM Sans', sans-serif;
   outline: none;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .mobile-form input::placeholder {
-  color: #78716c;
+  color: #a8a29e;
 }
 
 .mobile-form input:focus {
-  border-color: rgba(254, 252, 249, 0.4);
-  background: rgba(254, 252, 249, 0.12);
+  border-color: #1c1917;
+  box-shadow: 0 0 0 3px rgba(28, 25, 23, 0.08);
 }
 
 .mobile-form input.input-error {
@@ -161,20 +138,21 @@
 
 .mobile-form button {
   padding: 14px 24px;
-  background: #fefcf9;
+  background: #1c1917;
   border: none;
   border-radius: 12px;
-  color: #1c1917;
+  color: white;
   font-size: 15px;
   font-weight: 600;
   font-family: 'DM Sans', sans-serif;
   cursor: pointer;
-  transition: transform 0.15s, opacity 0.15s;
+  transition: transform 0.15s, background 0.15s;
   white-space: nowrap;
 }
 
 .mobile-form button:active {
   transform: scale(0.97);
+  background: #292524;
 }
 
 .mobile-form button:disabled {
@@ -185,7 +163,7 @@
 .form-error {
   margin-top: 8px;
   font-size: 13px;
-  color: #f87171;
+  color: #dc2626;
   text-align: left;
 }
 
@@ -196,8 +174,8 @@
   align-items: center;
   gap: 12px;
   padding: 24px;
-  background: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.2);
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
   border-radius: 16px;
   max-width: 340px;
   width: 100%;
@@ -218,12 +196,12 @@
 .mobile-success p {
   margin: 0;
   font-size: 15px;
-  color: #d6d3d1;
+  color: #166534;
 }
 
 /* Alternatives */
 .mobile-alternatives {
-  margin-top: 20px;
+  margin-top: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -232,7 +210,7 @@
 
 .alt-divider {
   font-size: 13px;
-  color: #57534e;
+  color: #a8a29e;
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
@@ -248,9 +226,9 @@
   gap: 6px;
   padding: 10px 16px;
   background: transparent;
-  border: 1.5px solid rgba(254, 252, 249, 0.15);
+  border: 1.5px solid #e7e5e4;
   border-radius: 10px;
-  color: #a8a29e;
+  color: #57534e;
   font-size: 14px;
   font-weight: 500;
   font-family: 'DM Sans', sans-serif;
@@ -259,9 +237,9 @@
 }
 
 .alt-btn:active {
-  background: rgba(254, 252, 249, 0.08);
-  border-color: rgba(254, 252, 249, 0.25);
-  color: #d6d3d1;
+  background: #f5f5f4;
+  border-color: #d6d3d1;
+  color: #1c1917;
 }
 
 .alt-btn span {
@@ -270,17 +248,10 @@
 
 /* Preview mockup */
 .mobile-preview {
-  margin-top: 24px;
+  margin-top: 32px;
   width: 100%;
-  max-width: 280px;
+  max-width: 300px;
   perspective: 1000px;
-}
-
-/* Hide mockup on short screens to fit content */
-@media (max-height: 680px) {
-  .mobile-preview {
-    display: none;
-  }
 }
 
 .preview-mockup {
@@ -288,9 +259,9 @@
   border-radius: 12px;
   overflow: hidden;
   box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
-  transform: rotateX(8deg);
+    0 4px 24px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  transform: rotateX(5deg);
   transform-origin: center top;
 }
 

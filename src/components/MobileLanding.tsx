@@ -79,10 +79,10 @@ function MobileLanding() {
         {/* Logo / Icon */}
         <div className="mobile-icon">
           <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="4" y="8" width="40" height="28" rx="4" stroke="currentColor" strokeWidth="2.5"/>
-            <circle cx="36" cy="32" r="8" fill="currentColor" opacity="0.9"/>
-            <circle cx="36" cy="32" r="4" fill="#1c1917"/>
-            <path d="M12 18h16M12 24h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <rect x="4" y="6" width="40" height="30" rx="4" stroke="currentColor" strokeWidth="2.5"/>
+            <circle cx="34" cy="26" r="7" fill="#ef4444"/>
+            <circle cx="34" cy="26" r="3" fill="white"/>
+            <path d="M12 16h14M12 22h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         </div>
 
@@ -94,13 +94,6 @@ function MobileLanding() {
         <p className="mobile-subheadline">
           Record beautiful whiteboard videos with your webcam. Like Loom, but for visual explanations.
         </p>
-
-        {/* Feature pills */}
-        <div className="mobile-features">
-          <span className="feature-pill">Webcam overlay</span>
-          <span className="feature-pill">Custom backgrounds</span>
-          <span className="feature-pill">No watermark</span>
-        </div>
 
         {/* Desktop only notice */}
         <div className="mobile-notice">

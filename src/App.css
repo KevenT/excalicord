@@ -1,0 +1,289 @@
+/**
+ * Main App Styles
+ * Aesthetic: Warm Studio - clean, refined, premium
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
+
+/* The outermost container - fills the entire viewport */
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background: #f5f5f4;
+  font-family: 'DM Sans', -apple-system, sans-serif;
+}
+
+/* Container for Excalidraw - fills most of the screen */
+.excalidraw-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/**
+ * Excalidraw overrides
+ */
+.excalidraw-container .excalidraw {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.excalidraw-container .excalidraw-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.excalidraw .excalidraw__canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ========== RECORDING OVERLAY ========== */
+.recording-overlay {
+  position: absolute;
+  background: rgba(28, 25, 23, 0.25);
+  pointer-events: none;
+  z-index: 900;
+}
+
+.recording-overlay-top {
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.recording-overlay-bottom {
+  left: 0;
+  right: 0;
+}
+
+.recording-overlay-left {
+  left: 0;
+}
+
+.recording-overlay-right {
+}
+
+/* Recording frame border */
+.recording-frame-border {
+  position: absolute;
+  border: 2px solid #dc2626;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 901;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+/* Enable pointer events in preview mode so user can drag/resize */
+.recording-frame-border.preview-mode {
+  pointer-events: auto;
+  border-color: #16a34a;
+  border-style: solid;
+  background: transparent;
+}
+
+/* Corner decorations for recording */
+.recording-frame-border::before,
+.recording-frame-border::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #dc2626;
+}
+
+.recording-frame-border::before {
+  top: -2px;
+  left: -2px;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 8px 0 0 0;
+}
+
+.recording-frame-border::after {
+  bottom: -2px;
+  right: -2px;
+  border-left: none;
+  border-top: none;
+  border-radius: 0 0 8px 0;
+}
+
+.recording-frame-border.preview-mode::before,
+.recording-frame-border.preview-mode::after {
+  border-color: #16a34a;
+}
+
+/* REC badge */
+.recording-badge {
+  position: absolute;
+  top: -32px;
+  left: 12px;
+  background: #dc2626;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  letter-spacing: 0.05em;
+  animation: pulse-badge 1.5s ease-in-out infinite;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ========== PREVIEW MODE ========== */
+.preview-instructions {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.preview-badge {
+  background: #16a34a;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);
+}
+
+.preview-hint {
+  color: white;
+  font-size: 13px;
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  background: rgba(28, 25, 23, 0.8);
+  padding: 8px 14px;
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+}
+
+/* ========== RESIZE HANDLES ========== */
+.resize-handle {
+  position: absolute;
+  background: #16a34a;
+  border: 2px solid white;
+  border-radius: 4px;
+  z-index: 910;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.resize-handle-corner {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.resize-handle-nw { top: -7px; left: -7px; cursor: nw-resize; }
+.resize-handle-ne { top: -7px; right: -7px; cursor: ne-resize; }
+.resize-handle-sw { bottom: -7px; left: -7px; cursor: sw-resize; }
+.resize-handle-se { bottom: -7px; right: -7px; cursor: se-resize; }
+
+/* ========== TELEPROMPTER ========== */
+.teleprompter {
+  position: fixed;
+  width: 340px;
+  max-height: calc(100vh - 120px);
+  background: #fefcf9;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.1),
+    0 16px 48px rgba(0, 0, 0, 0.08);
+  z-index: 2500;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  user-select: none;
+}
+
+.teleprompter.dragging {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 12px 32px rgba(0, 0, 0, 0.15),
+    0 24px 64px rgba(0, 0, 0, 0.12);
+}
+
+.teleprompter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  background: #fafaf9;
+  border-bottom: 1px solid #e7e5e4;
+  color: #44403c;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.teleprompter-close {
+  background: none;
+  border: none;
+  color: #a8a29e;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.15s;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.teleprompter-close:hover {
+  color: #44403c;
+  background: #e7e5e4;
+}
+
+.teleprompter-text {
+  flex: 1;
+  min-height: 300px;
+  padding: 18px;
+  background: transparent;
+  border: none;
+  color: #1c1917;
+  font-size: 18px;
+  line-height: 1.7;
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  resize: none;
+  outline: none;
+  user-select: text;
+  cursor: text;
+}
+
+.teleprompter-text::placeholder {
+  color: #a8a29e;
+}
+
+/* ========== LIVE CURSOR INDICATOR ========== */
+.cursor-indicator {
+  position: fixed;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.1s;
+}

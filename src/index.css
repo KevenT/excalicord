@@ -1,0 +1,49 @@
+/**
+ * Global Styles & CSS Reset
+ *
+ * This file sets up the base styles for the entire app.
+ * We remove default margins/padding and set up consistent defaults.
+ */
+
+/* Remove all default margins and padding */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;  /* Makes width/height include padding and border */
+}
+
+/* Root variables - could be used for theming later */
+:root {
+  /* Typography */
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+
+  /* Smooth font rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Colors */
+  --color-primary: #3b82f6;
+  --color-danger: #ef4444;
+  --color-dark: #1a1a2e;
+}
+
+/* Ensure html and body fill the viewport */
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;  /* Prevent scrollbars */
+}
+
+/* The React root element */
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* Prevent text selection during drag operations */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}

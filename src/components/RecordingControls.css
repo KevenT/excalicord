@@ -1,0 +1,239 @@
+/**
+ * RecordingControls Styles
+ * Aesthetic: Warm Studio - refined, tactile, premium
+ */
+
+.recording-controls {
+  position: fixed;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  background: #fefcf9;
+  padding: 8px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    0 12px 32px rgba(0, 0, 0, 0.06);
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  cursor: grab;
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.recording-controls.dragging {
+  cursor: grabbing;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 20px 48px rgba(0, 0, 0, 0.1);
+}
+
+/* ========== ICON BUTTONS ========== */
+.settings-btn,
+.teleprompter-btn {
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #78716c;
+  font-size: 18px;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-btn:hover:not(:disabled),
+.teleprompter-btn:hover:not(:disabled) {
+  background: #f5f5f4;
+  color: #44403c;
+}
+
+.settings-btn:disabled,
+.teleprompter-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.teleprompter-btn.active {
+  background: #292524;
+  color: white;
+}
+
+/* Cursor toggle button during recording */
+.cursor-toggle-btn {
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #a8a29e;
+  font-size: 16px;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+}
+
+.cursor-toggle-btn:hover {
+  background: #f5f5f4;
+  color: #78716c;
+  opacity: 1;
+}
+
+.cursor-toggle-btn.active {
+  color: #ef4444;
+  opacity: 1;
+}
+
+/* ========== MAIN BUTTONS ========== */
+.control-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.record-button {
+  background: #dc2626;
+  color: white;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+}
+
+.record-button:hover {
+  background: #b91c1c;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+
+.stop-button {
+  background: #44403c;
+  color: white;
+}
+
+.stop-button:hover {
+  background: #292524;
+  transform: translateY(-1px);
+}
+
+/* Pause/Resume button */
+.pause-button {
+  background: #f59e0b;
+  color: white;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.pause-button:hover {
+  background: #d97706;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+/* Cancel button for preview mode */
+.cancel-button {
+  background: transparent;
+  color: #78716c;
+  border: 1.5px solid #e7e5e4;
+}
+
+.cancel-button:hover {
+  background: #f5f5f4;
+  border-color: #d6d3d1;
+  color: #44403c;
+}
+
+/* Confirm button to start recording */
+.confirm-button {
+  background: #16a34a;
+  color: white;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
+}
+
+.confirm-button:hover {
+  background: #15803d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+}
+
+/* ========== TIMER ========== */
+.recording-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #44403c;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 4px;
+}
+
+.recording-dot {
+  width: 8px;
+  height: 8px;
+  background: #dc2626;
+  border-radius: 50%;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* Paused state - amber color, no animation */
+.recording-dot.paused {
+  background: #f59e0b;
+  animation: none;
+}
+
+.recording-timer.paused {
+  color: #78716c;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.9); }
+}
+
+/* ========== CONVERTING STATUS ========== */
+.converting-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #44403c;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e7e5e4;
+  border-top-color: #44403c;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Legacy - hide old drag handle */
+.drag-handle {
+  display: none;
+}
+
+.grip-dots {
+  display: none;
+}

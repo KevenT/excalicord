@@ -88,7 +88,7 @@ function MobileLanding() {
 
         {/* Headline */}
         <h1 className="mobile-headline">
-          Excalidraw<br />Recorder
+          Excalicord
         </h1>
 
         <p className="mobile-subheadline">

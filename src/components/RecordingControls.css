@@ -34,13 +34,11 @@
 }
 
 /* ========== ICON BUTTONS ========== */
-.settings-btn,
-.teleprompter-btn {
+.icon-btn {
   background: transparent;
   border: none;
   border-radius: 8px;
   color: #78716c;
-  font-size: 18px;
   padding: 8px;
   cursor: pointer;
   transition: all 0.15s;
@@ -49,48 +47,33 @@
   justify-content: center;
 }
 
-.settings-btn:hover:not(:disabled),
-.teleprompter-btn:hover:not(:disabled) {
+.icon-btn svg {
+  display: block;
+}
+
+.icon-btn:hover:not(:disabled) {
   background: #f5f5f4;
   color: #44403c;
 }
 
-.settings-btn:disabled,
-.teleprompter-btn:disabled {
+.icon-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.teleprompter-btn.active {
+.icon-btn.active {
   background: #292524;
   color: white;
 }
 
-/* Cursor toggle button during recording */
-.cursor-toggle-btn {
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  color: #a8a29e;
-  font-size: 16px;
-  padding: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.6;
-}
-
-.cursor-toggle-btn:hover {
-  background: #f5f5f4;
-  color: #78716c;
-  opacity: 1;
-}
-
+/* Cursor toggle - red when active */
 .cursor-toggle-btn.active {
+  background: transparent;
   color: #ef4444;
-  opacity: 1;
+}
+
+.cursor-toggle-btn.active:hover {
+  background: #fef2f2;
 }
 
 /* ========== MAIN BUTTONS ========== */

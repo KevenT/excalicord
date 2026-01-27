@@ -189,7 +189,7 @@ function MobileLanding() {
 
               {/* Profile avatar with circular outline */}
               <div className="mockup-avatar">
-                <img src="/avatar.jpg" alt="Presenter" />
+                <img src="/avatar.png" alt="Presenter" />
               </div>
             </div>
           </div>

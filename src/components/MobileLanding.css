@@ -280,21 +280,25 @@
   inset: 0;
 }
 
-/* Notion-style avatar in bottom-right corner */
+/* Avatar in bottom-right corner with circular outline */
 .mockup-avatar {
   position: absolute;
-  bottom: 10px;
-  right: 10px;
-  width: 60px;
-  height: 60px;
+  bottom: 12px;
+  right: 12px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   border: 3px solid white;
+  outline: 2px solid #1e1e1e;
+  background: white;
 }
 
-.mockup-avatar svg {
+.mockup-avatar img {
   width: 100%;
   height: 100%;
+  object-fit: cover;
+  object-position: top center;
   display: block;
 }

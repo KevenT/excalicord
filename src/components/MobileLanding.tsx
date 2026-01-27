@@ -161,44 +161,35 @@ function MobileLanding() {
         <div className="mobile-preview">
           <div className="preview-mockup">
             <div className="mockup-canvas">
-              {/* Excalidraw-style hand-drawn whiteboard content */}
+              {/* Excalidraw-style flowchart */}
               <svg className="whiteboard-content" viewBox="0 0 320 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-                {/* Wobbly rectangle - hand drawn style */}
-                <path d="M32 35 C35 34 70 32 100 33 C130 34 155 31 170 33 C172 50 173 75 171 95 C170 97 140 99 100 98 C60 97 35 100 33 98 C31 80 30 55 32 35" stroke="#1e1e1e" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-                {/* Wobbly text lines */}
-                <path d="M45 50 C55 49 75 51 105 50" stroke="#1e1e1e" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M45 62 C60 63 90 61 120 62" stroke="#1e1e1e" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M45 74 C52 73 70 75 90 74" stroke="#1e1e1e" strokeWidth="1.5" strokeLinecap="round"/>
-                {/* Wobbly arrow */}
-                <path d="M178 65 C190 64 210 60 235 48" stroke="#1e1e1e" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-                <path d="M225 45 C228 46 234 47 236 49 C234 51 230 55 228 58" stroke="#1e1e1e" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-                {/* Wobbly circle */}
-                <path d="M255 38 C268 36 280 42 281 55 C282 68 270 78 257 77 C244 76 234 66 235 53 C236 42 245 37 255 38" stroke="#e03131" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-                {/* Wobbly underline */}
-                <path d="M35 130 C60 133 100 127 140 131 C170 128 190 132 210 129" stroke="#1971c2" strokeWidth="2" fill="none" strokeLinecap="round"/>
-                {/* Small dots for texture */}
-                <circle cx="260" cy="57" r="2" fill="#e03131"/>
+                {/* Top box - "Start" */}
+                <path d="M50 25 C52 24 85 23 110 24 C112 35 113 50 111 62 C85 63 52 64 50 62 C48 50 49 35 50 25" stroke="#1e1e1e" strokeWidth="1.6" fill="none" strokeLinecap="round"/>
+                <path d="M65 42 C70 41 85 42 95 41" stroke="#1e1e1e" strokeWidth="1.4" strokeLinecap="round"/>
+
+                {/* Arrow down from top box */}
+                <path d="M80 64 C81 75 79 90 80 100" stroke="#1e1e1e" strokeWidth="1.6" fill="none" strokeLinecap="round"/>
+                <path d="M74 92 L80 102 L86 92" stroke="#1e1e1e" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+
+                {/* Middle diamond - decision */}
+                <path d="M80 105 L115 130 L80 155 L45 130 Z" stroke="#1971c2" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M65 130 C70 129 90 130 95 129" stroke="#1971c2" strokeWidth="1.2" strokeLinecap="round"/>
+
+                {/* Arrow right from diamond */}
+                <path d="M117 130 C140 131 165 129 185 130" stroke="#1e1e1e" strokeWidth="1.6" fill="none" strokeLinecap="round"/>
+                <path d="M177 124 L187 130 L177 136" stroke="#1e1e1e" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+
+                {/* Right box */}
+                <path d="M190 110 C192 109 225 108 250 109 C252 120 253 140 251 152 C225 153 192 154 190 152 C188 140 189 120 190 110" stroke="#e03131" strokeWidth="1.6" fill="none" strokeLinecap="round"/>
+                <path d="M205 128 C210 127 230 128 240 127" stroke="#e03131" strokeWidth="1.4" strokeLinecap="round"/>
+
+                {/* Arrow down from diamond */}
+                <path d="M80 157 C81 165 79 175 80 182" stroke="#1e1e1e" strokeWidth="1.6" fill="none" strokeLinecap="round"/>
               </svg>
 
-              {/* Notion-style black & white person avatar */}
+              {/* Profile avatar with circular outline */}
               <div className="mockup-avatar">
-                <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {/* White background */}
-                  <circle cx="40" cy="40" r="39" fill="white" stroke="#1e1e1e" strokeWidth="1.5"/>
-                  {/* Simple hair */}
-                  <path d="M20 32 C20 18 28 12 40 12 C52 12 60 18 60 32 C60 34 58 35 56 34 L56 26 C56 18 50 14 40 14 C30 14 24 18 24 26 L24 34 C22 35 20 34 20 32" fill="#1e1e1e"/>
-                  {/* Face outline */}
-                  <ellipse cx="40" cy="36" rx="16" ry="17" fill="white" stroke="#1e1e1e" strokeWidth="1.5"/>
-                  {/* Eyes - simple dots */}
-                  <circle cx="34" cy="34" r="2" fill="#1e1e1e"/>
-                  <circle cx="46" cy="34" r="2" fill="#1e1e1e"/>
-                  {/* Simple smile */}
-                  <path d="M34 43 C37 47 43 47 46 43" stroke="#1e1e1e" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                  {/* Neck */}
-                  <path d="M35 52 L35 58 L45 58 L45 52" stroke="#1e1e1e" strokeWidth="1.5" fill="white"/>
-                  {/* Shoulders/body - simple lines */}
-                  <path d="M18 78 C18 65 28 58 40 58 C52 58 62 65 62 78" stroke="#1e1e1e" strokeWidth="1.5" fill="white"/>
-                </svg>
+                <img src="/avatar.jpg" alt="Presenter" />
               </div>
             </div>
           </div>

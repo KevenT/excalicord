@@ -123,7 +123,7 @@ function RecordingControls({
       <button
         className="icon-btn settings-btn"
         onClick={onOpenSettings}
-        title="Settings – Customize background, aspect ratio, webcam size"
+        data-tooltip="Settings"
         disabled={isRecording || isConverting || isPreviewing}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -136,7 +136,7 @@ function RecordingControls({
       <button
         className={`icon-btn teleprompter-btn ${showTeleprompter ? 'active' : ''}`}
         onClick={onToggleTeleprompter}
-        title="Teleprompter – Read your script while recording (not visible in video)"
+        data-tooltip="Teleprompter"
         disabled={isConverting}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -159,7 +159,7 @@ function RecordingControls({
           <button
             className={`icon-btn cursor-toggle-btn ${showCursor ? 'active' : ''}`}
             onClick={onToggleCursor}
-            title={showCursor ? 'Hide cursor highlight' : 'Show cursor highlight'}
+            data-tooltip={showCursor ? 'Hide cursor' : 'Show cursor'}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/>

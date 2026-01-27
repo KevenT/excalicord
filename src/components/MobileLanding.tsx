@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import './MobileLanding.css';
+import { trackMobileEmailSent } from '../utils/analytics';
 
 function MobileLanding() {
   const [email, setEmail] = useState('');
@@ -45,10 +46,12 @@ function MobileLanding() {
 
       if (response.ok) {
         setStatus('sent');
+        trackMobileEmailSent(true);
       } else {
         const data = await response.json();
         setErrorMessage(data.error || 'Failed to send email');
         setStatus('error');
+        trackMobileEmailSent(false);
       }
     } catch {
       setErrorMessage('Network error. Try the share button instead.');

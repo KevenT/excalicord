@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import './WelcomeModal.css';
+import { trackWelcomeModalDismissed } from '../utils/analytics';
 
 const STORAGE_KEY = 'excalicord_welcomed';
 
@@ -37,6 +38,7 @@ function WelcomeModal() {
   const handleDismiss = () => {
     localStorage.setItem(STORAGE_KEY, 'true');
     setIsVisible(false);
+    trackWelcomeModalDismissed();
   };
 
   if (!isVisible) return null;

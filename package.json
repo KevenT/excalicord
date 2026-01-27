@@ -15,6 +15,7 @@
     "@ffmpeg/util": "^0.12.2",
     "es6-promise-pool": "^2.5.0",
     "mp4-muxer": "^5.2.2",
+    "posthog-js": "^1.335.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "vite-plugin-commonjs": "^0.10.4"

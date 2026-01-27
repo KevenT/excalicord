@@ -18,7 +18,11 @@ import SettingsPanel, { ASPECT_RATIOS } from './components/SettingsPanel';
 import MobileLanding from './components/MobileLanding';
 import WelcomeModal from './components/WelcomeModal';
 import type { RecordingSettings } from './components/SettingsPanel';
+import { initAnalytics, trackPageView, trackRecordingStarted, trackRecordingCompleted, trackRecordingCancelled, trackTeleprompterUsed, trackSettingsChanged } from './utils/analytics';
 import './App.css';
+
+// Initialize analytics once when module loads
+initAnalytics();
 
 // Detect if user is on a mobile device
 const isMobileDevice = () => {
@@ -54,6 +58,11 @@ const DEFAULT_SETTINGS: RecordingSettings = {
 function App() {
   // Check for mobile device - show landing page instead of app
   const [isMobile] = useState(() => isMobileDevice());
+
+  // Track page view on mount
+  useEffect(() => {
+    trackPageView(isMobile);
+  }, [isMobile]);
 
   // If on mobile, show the landing page with email capture
   if (isMobile) {
@@ -92,6 +101,9 @@ function App() {
   const mousePositionRef = useRef({ x: 0, y: 0 });
   const backgroundImageRef = useRef<HTMLImageElement | null>(null);
   const backgroundImageLoadedRef = useRef(false);
+  const recordingStartTimeRef = useRef<number | null>(null);
+  const usedTeleprompterRef = useRef(false);
+  const usedPauseRef = useRef(false);
 
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
   useEffect(() => { bubblePositionRef.current = bubblePosition; }, [bubblePosition]);
@@ -486,6 +498,7 @@ function App() {
 
   // Cancel preview mode
   const cancelPreview = useCallback(() => {
+    trackRecordingCancelled('preview');
     setIsPreviewing(false);
     setRecordingFrame(null);
   }, []);
@@ -554,6 +567,17 @@ function App() {
 
     // Start rendering loop first to ensure we have frames ready
     setIsRecording(true);
+
+    // Track recording started
+    recordingStartTimeRef.current = Date.now();
+    usedTeleprompterRef.current = showTeleprompter;
+    usedPauseRef.current = false;
+    trackRecordingStarted({
+      aspectRatio: settings.aspectRatio,
+      background: settings.backgroundId || 'custom',
+      webcamEnabled: settings.showCamera,
+      webcamPosition: 'bottom-right' // Currently fixed position
+    });
 
     // Render a few frames before starting the recorder to avoid black first frame
     const preRenderFrames = () => {
@@ -702,7 +726,8 @@ function App() {
       mediaRecorderRef.current.resume();
       setIsPaused(false);
     } else {
-      // Pause recording
+      // Pause recording - track that pause was used
+      usedPauseRef.current = true;
       mediaRecorderRef.current.pause();
       setIsPaused(true);
     }
@@ -710,6 +735,20 @@ function App() {
 
   // Stop recording
   const stopRecording = useCallback(() => {
+    // Track recording completed with duration
+    if (recordingStartTimeRef.current) {
+      const durationSeconds = Math.round((Date.now() - recordingStartTimeRef.current) / 1000);
+      trackRecordingCompleted({
+        durationSeconds,
+        aspectRatio: settingsRef.current.aspectRatio,
+        background: settingsRef.current.backgroundId || 'custom',
+        webcamEnabled: settingsRef.current.showCamera,
+        usedTeleprompter: usedTeleprompterRef.current,
+        usedPause: usedPauseRef.current
+      });
+      recordingStartTimeRef.current = null;
+    }
+
     setIsRecording(false);
     setIsPaused(false);
     setRecordingFrame(null);
@@ -785,14 +824,33 @@ function App() {
         onConfirmRecording={confirmRecording}
         onCancelPreview={cancelPreview}
         onOpenSettings={() => setShowSettings(true)}
-        onToggleTeleprompter={() => setShowTeleprompter(!showTeleprompter)}
+        onToggleTeleprompter={() => {
+          const newState = !showTeleprompter;
+          setShowTeleprompter(newState);
+          trackTeleprompterUsed(newState ? 'opened' : 'closed');
+          if (newState && isRecording) {
+            usedTeleprompterRef.current = true;
+          }
+        }}
         showTeleprompter={showTeleprompter}
       />
 
       <SettingsPanel
         isOpen={showSettings}
         settings={settings}
-        onSettingsChange={setSettings}
+        onSettingsChange={(newSettings) => {
+          // Track significant setting changes
+          if (newSettings.aspectRatio !== settings.aspectRatio) {
+            trackSettingsChanged('aspect_ratio', newSettings.aspectRatio);
+          }
+          if (newSettings.backgroundId !== settings.backgroundId) {
+            trackSettingsChanged('background', newSettings.backgroundId || 'custom');
+          }
+          if (newSettings.showCamera !== settings.showCamera) {
+            trackSettingsChanged('webcam', newSettings.showCamera ? 'enabled' : 'disabled');
+          }
+          setSettings(newSettings);
+        }}
         onClose={() => setShowSettings(false)}
       />
 

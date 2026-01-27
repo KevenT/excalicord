@@ -157,18 +157,47 @@ function MobileLanding() {
           </div>
         </div>
 
-        {/* Preview image */}
+        {/* Preview image - shows what the recorded video looks like */}
         <div className="mobile-preview">
           <div className="preview-mockup">
-            <div className="mockup-toolbar">
-              <span className="mockup-dot" />
-              <span className="mockup-dot" />
-              <span className="mockup-dot" />
-            </div>
-            <div className="mockup-content">
-              <div className="mockup-canvas">
-                <div className="mockup-drawing" />
-                <div className="mockup-webcam" />
+            <div className="mockup-canvas">
+              {/* Excalidraw-style whiteboard content */}
+              <svg className="whiteboard-content" viewBox="0 0 320 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Hand-drawn style rectangle */}
+                <path d="M40 40 L180 38 L182 100 L42 102 Z" stroke="#1e1e1e" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{strokeDasharray: '0'}} />
+                {/* Hand-drawn arrow */}
+                <path d="M190 70 Q220 70 250 50" stroke="#1e1e1e" strokeWidth="2" fill="none" strokeLinecap="round" />
+                <path d="M245 42 L250 50 L242 52" stroke="#1e1e1e" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                {/* Text lines inside box */}
+                <path d="M55 55 L120 55" stroke="#1e1e1e" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+                <path d="M55 70 L140 70" stroke="#1e1e1e" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+                <path d="M55 85 L100 85" stroke="#1e1e1e" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+                {/* Small circle with text */}
+                <circle cx="270" cy="45" r="18" stroke="#e03131" strokeWidth="2" fill="none" />
+                <path d="M265 45 L275 45" stroke="#e03131" strokeWidth="1.5" strokeLinecap="round" />
+                {/* Loose scribble/underline */}
+                <path d="M40 130 Q90 135 140 128 Q180 125 200 130" stroke="#1971c2" strokeWidth="2" fill="none" strokeLinecap="round" />
+              </svg>
+
+              {/* Notion-style person avatar in corner */}
+              <div className="mockup-avatar">
+                <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* Background circle */}
+                  <circle cx="40" cy="40" r="40" fill="#FEF3E2"/>
+                  {/* Face */}
+                  <circle cx="40" cy="35" r="18" fill="#FFDAB3"/>
+                  {/* Hair */}
+                  <path d="M22 30 Q22 15 40 15 Q58 15 58 30 Q58 35 55 35 L55 28 Q55 20 40 20 Q25 20 25 28 L25 35 Q22 35 22 30Z" fill="#4A3728"/>
+                  {/* Eyes */}
+                  <circle cx="34" cy="33" r="2.5" fill="#1e1e1e"/>
+                  <circle cx="46" cy="33" r="2.5" fill="#1e1e1e"/>
+                  {/* Friendly smile */}
+                  <path d="M34 42 Q40 47 46 42" stroke="#1e1e1e" strokeWidth="2" fill="none" strokeLinecap="round"/>
+                  {/* Body/shoulders */}
+                  <path d="M20 80 Q20 58 40 55 Q60 58 60 80" fill="#7C9ED9"/>
+                  {/* Neck */}
+                  <rect x="35" y="50" width="10" height="8" fill="#FFDAB3"/>
+                </svg>
               </div>
             </div>
           </div>

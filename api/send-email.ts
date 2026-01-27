@@ -46,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Excalicord <hello@send.excalicord.com>',
+        from: 'Excalicord <hello@excalicord.com>',
         to: email,
         subject: 'Your Excalicord Link',
         html: `

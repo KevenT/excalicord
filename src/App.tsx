@@ -16,6 +16,7 @@ import WebcamBubble from './components/WebcamBubble';
 import RecordingControls from './components/RecordingControls';
 import SettingsPanel, { ASPECT_RATIOS } from './components/SettingsPanel';
 import MobileLanding from './components/MobileLanding';
+import WelcomeModal from './components/WelcomeModal';
 import type { RecordingSettings } from './components/SettingsPanel';
 import './App.css';
 
@@ -770,6 +771,7 @@ function App() {
 
   return (
     <div className="app-container">
+      <WelcomeModal />
       <RecordingControls
         isRecording={isRecording}
         isPreviewing={isPreviewing}

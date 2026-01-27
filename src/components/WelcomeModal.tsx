@@ -44,13 +44,13 @@ function WelcomeModal() {
   return (
     <div className="welcome-overlay" onClick={handleDismiss}>
       <div className="welcome-modal" onClick={e => e.stopPropagation()}>
-        {/* App icon */}
+        {/* App icon - whiteboard with webcam bubble inside */}
         <div className="welcome-icon">
           <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="4" y="8" width="40" height="28" rx="4" stroke="currentColor" strokeWidth="2.5"/>
-            <circle cx="36" cy="32" r="8" fill="#ef4444"/>
-            <circle cx="36" cy="32" r="4" fill="white"/>
-            <path d="M12 18h16M12 24h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <rect x="4" y="6" width="40" height="30" rx="4" stroke="currentColor" strokeWidth="2.5"/>
+            <circle cx="34" cy="26" r="7" fill="#ef4444"/>
+            <circle cx="34" cy="26" r="3" fill="white"/>
+            <path d="M12 16h14M12 22h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         </div>
 
@@ -64,15 +64,15 @@ function WelcomeModal() {
         <div className="welcome-features">
           <div className="welcome-feature">
             <span className="feature-icon">🎨</span>
-            <span>Draw on the whiteboard</span>
+            <span>Draw on the infinite whiteboard</span>
           </div>
           <div className="welcome-feature">
             <span className="feature-icon">📹</span>
             <span>Your webcam appears in the corner</span>
           </div>
           <div className="welcome-feature">
-            <span className="feature-icon">⚙️</span>
-            <span>Customize backgrounds & aspect ratio</span>
+            <span className="feature-icon">📜</span>
+            <span>Built-in teleprompter for scripts</span>
           </div>
           <div className="welcome-feature">
             <span className="feature-icon">⏺️</span>

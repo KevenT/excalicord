@@ -79,9 +79,10 @@ export class WebCodecsRecorder {
     });
 
     // Configure video encoder with H.264
-    // Use baseline profile for maximum compatibility
+    // Use High Profile Level 4.0 for 1080p support
+    // Level 4.0 supports up to 1920x1080 @ 30fps
     this.videoEncoder.configure({
-      codec: 'avc1.42001f', // H.264 Baseline Level 3.1
+      codec: 'avc1.640028', // H.264 High Profile Level 4.0
       width: this.width,
       height: this.height,
       bitrate: this.videoBitrate,

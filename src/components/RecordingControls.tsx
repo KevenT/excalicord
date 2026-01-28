@@ -10,6 +10,7 @@ interface RecordingControlsProps {
   isPreviewing: boolean;
   isPaused: boolean;
   isConverting: boolean;
+  convertingMessage?: string;
   showCursor: boolean;
   onStartRecording: () => void;
   onStopRecording: () => void;
@@ -27,6 +28,7 @@ function RecordingControls({
   isPreviewing,
   isPaused,
   isConverting,
+  convertingMessage,
   showCursor,
   onStartRecording,
   onStopRecording,
@@ -151,7 +153,7 @@ function RecordingControls({
       {isConverting ? (
         <div className="converting-status">
           <span className="spinner"></span>
-          Converting...
+          {convertingMessage || 'Converting...'}
         </div>
       ) : isRecording ? (
         <>

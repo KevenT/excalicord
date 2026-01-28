@@ -73,6 +73,8 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false); // Preview mode before recording
   const [isPaused, setIsPaused] = useState(false); // Pause state during recording
+  const [isConverting, setIsConverting] = useState(false);
+  const [convertingMessage, setConvertingMessage] = useState('');
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
   const [bubblePosition, setBubblePosition] = useState({ x: 20, y: 100 });
   const [showSettings, setShowSettings] = useState(false);
@@ -555,16 +557,66 @@ function App() {
     };
 
     mediaRecorder.onstop = async () => {
-      const isMP4 = mimeType.includes('mp4');
+      const isMP4Native = mimeType.includes('mp4');
       const blob = new Blob(recordedChunksRef.current, { type: mimeType });
-      const extension = isMP4 ? 'mp4' : 'webm';
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `excalicord-${Date.now()}.${extension}`;
-      a.click();
-      URL.revokeObjectURL(url);
+      // If Safari recorded as MP4, download directly
+      if (isMP4Native) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `excalicord-${Date.now()}.mp4`;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      // For WebM recordings, convert to MP4 server-side
+      setIsConverting(true);
+      setConvertingMessage('Uploading video...');
+
+      try {
+        // Send WebM to server for conversion
+        const response = await fetch('/api/convert-video', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'video/webm',
+          },
+          body: blob,
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Conversion failed');
+        }
+
+        setConvertingMessage('Downloading MP4...');
+
+        // Get the MP4 blob from response
+        const mp4Blob = await response.blob();
+
+        // Download the MP4
+        const url = URL.createObjectURL(mp4Blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `excalicord-${Date.now()}.mp4`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+      } catch (error) {
+        console.error('Server conversion failed:', error);
+        // Fallback: download as WebM
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `excalicord-${Date.now()}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+        alert('MP4 conversion failed. Video saved as WebM instead.\n\nYou can convert it at cloudconvert.com');
+      } finally {
+        setIsConverting(false);
+        setConvertingMessage('');
+      }
     };
 
     // Start rendering loop first to ensure we have frames ready
@@ -817,7 +869,8 @@ function App() {
         isRecording={isRecording}
         isPreviewing={isPreviewing}
         isPaused={isPaused}
-        isConverting={false}
+        isConverting={isConverting}
+        convertingMessage={convertingMessage}
         showCursor={settings.showCursor}
         onStartRecording={enterPreviewMode}
         onStopRecording={stopRecording}

@@ -41,6 +41,7 @@ export class WebCodecsRecorder {
   private isRecording: boolean = false;
   private isPaused: boolean = false;
   private audioSampleRate: number = 48000;
+  private warmupFrames: number = 5; // Skip first few frames for encoder warmup
   private audioTimestamp: number = 0;
 
   constructor(options: WebCodecsRecorderOptions) {
@@ -87,7 +88,11 @@ export class WebCodecsRecorder {
       height: this.height,
       bitrate: this.videoBitrate,
       framerate: this.frameRate,
+      latencyMode: 'realtime', // Optimize for live recording
     });
+
+    // Wait for encoder to be ready
+    await this.videoEncoder.flush();
 
     // Set up audio encoding if we have an audio stream
     if (this.audioStream) {
@@ -178,8 +183,15 @@ export class WebCodecsRecorder {
   addFrame(canvas: HTMLCanvasElement | OffscreenCanvas): void {
     if (!this.isRecording || this.isPaused || !this.videoEncoder) return;
 
-    // Calculate timestamp in microseconds
-    const timestamp = (this.frameCount * 1_000_000) / this.frameRate;
+    // Skip warmup frames to let encoder initialize
+    if (this.frameCount < this.warmupFrames) {
+      this.frameCount++;
+      return;
+    }
+
+    // Calculate timestamp in microseconds (offset by warmup frames)
+    const adjustedFrame = this.frameCount - this.warmupFrames;
+    const timestamp = (adjustedFrame * 1_000_000) / this.frameRate;
 
     // Create VideoFrame from canvas
     const frame = new VideoFrame(canvas, {
@@ -188,8 +200,8 @@ export class WebCodecsRecorder {
     });
 
     // Encode the frame
-    // Keyframe every 2 seconds
-    const keyFrame = this.frameCount % (this.frameRate * 2) === 0;
+    // First frame and every 2 seconds should be keyframes
+    const keyFrame = adjustedFrame === 0 || adjustedFrame % (this.frameRate * 2) === 0;
     this.videoEncoder.encode(frame, { keyFrame });
 
     frame.close();

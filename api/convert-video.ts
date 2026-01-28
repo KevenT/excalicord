@@ -74,20 +74,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await new Promise<void>((resolve, reject) => {
       ffmpeg(inputPath)
         .outputOptions([
-          '-c:v libx264',      // H.264 video codec
-          '-preset fast',       // Fast encoding
-          '-crf 23',            // Good quality
+          '-c:v libx264',       // H.264 video codec
+          '-preset ultrafast',  // Fastest encoding (Vercel has limited CPU)
+          '-crf 28',            // Slightly lower quality for speed
           '-c:a aac',           // AAC audio
-          '-b:a 128k',          // Audio bitrate
+          '-b:a 96k',           // Lower audio bitrate
           '-movflags +faststart', // Optimize for streaming
           '-pix_fmt yuv420p',   // Compatibility
+          '-threads 1',         // Single thread (serverless)
         ])
         .output(outputPath)
         .on('start', (cmd) => {
-          console.log('[convert-video] FFmpeg started:', cmd);
-        })
-        .on('progress', (progress) => {
-          console.log('[convert-video] Progress:', progress.percent?.toFixed(1) + '%');
+          console.log('[convert-video] FFmpeg started');
         })
         .on('end', () => {
           console.log('[convert-video] Conversion complete');

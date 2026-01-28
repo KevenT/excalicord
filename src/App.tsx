@@ -524,16 +524,18 @@ function App() {
       ...audioTracks
     ]);
 
+    // Use WebM - most reliable format for browser recording
+    // MP4 recording is buggy in most browsers and produces unplayable files
     let mimeType = 'video/webm';
-    if (MediaRecorder.isTypeSupported('video/mp4')) {
-      mimeType = 'video/mp4';
-    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
+    if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
       mimeType = 'video/webm;codecs=vp9,opus';
+    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+      mimeType = 'video/webm;codecs=vp8,opus';
     }
 
     const mediaRecorder = new MediaRecorder(combinedStream, {
       mimeType,
-      videoBitsPerSecond: 4000000
+      videoBitsPerSecond: 5000000 // 5 Mbps for good quality
     });
 
     mediaRecorderRef.current = mediaRecorder;
@@ -544,25 +546,14 @@ function App() {
     };
 
     mediaRecorder.onstop = async () => {
-      const isMP4 = mimeType.includes('mp4');
       const blob = new Blob(recordedChunksRef.current, { type: mimeType });
-      const extension = isMP4 ? 'mp4' : 'webm';
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `excalicord-${Date.now()}.${extension}`;
+      a.download = `excalicord-${Date.now()}.webm`;
       a.click();
       URL.revokeObjectURL(url);
-
-      if (!isMP4) {
-        setTimeout(() => {
-          alert('Video saved as WebM. To convert to MP4:\n\n' +
-            '• Mac: Open with QuickTime → File → Export As → 1080p\n' +
-            '• Or use cloudconvert.com\n' +
-            '• Or VLC can play WebM directly');
-        }, 500);
-      }
     };
 
     // Start rendering loop first to ensure we have frames ready

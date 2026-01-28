@@ -4,46 +4,67 @@
  * Browser recording produces WebM files, but users want MP4.
  * This uses FFmpeg compiled to WebAssembly to do the conversion
  * entirely in the browser - no server needed.
+ *
+ * Uses single-threaded version for maximum compatibility (no special headers needed).
  */
 
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 let ffmpeg: FFmpeg | null = null;
-let isLoaded = false;
+let isLoading = false;
+let loadPromise: Promise<FFmpeg> | null = null;
 
 /**
  * Load FFmpeg WASM (only needs to happen once)
- * This downloads ~30MB of WASM files on first use
+ * Uses single-threaded core for compatibility
  */
 async function loadFFmpeg(onProgress?: (message: string) => void): Promise<FFmpeg> {
-  if (ffmpeg && isLoaded) {
+  // If already loaded, return immediately
+  if (ffmpeg && ffmpeg.loaded) {
     return ffmpeg;
   }
 
-  ffmpeg = new FFmpeg();
+  // If currently loading, wait for that to finish
+  if (isLoading && loadPromise) {
+    return loadPromise;
+  }
 
-  // Log progress
-  ffmpeg.on('log', ({ message }) => {
-    console.log('[FFmpeg]', message);
-  });
+  isLoading = true;
 
-  ffmpeg.on('progress', ({ progress }) => {
-    const percent = Math.round(progress * 100);
-    onProgress?.(`Converting: ${percent}%`);
-  });
+  loadPromise = (async () => {
+    ffmpeg = new FFmpeg();
 
-  onProgress?.('Loading converter...');
+    // Log progress
+    ffmpeg.on('log', ({ message }) => {
+      console.log('[FFmpeg]', message);
+    });
 
-  // Load FFmpeg WASM from CDN
-  const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-  });
+    ffmpeg.on('progress', ({ progress }) => {
+      const percent = Math.round(progress * 100);
+      onProgress?.(`Converting: ${percent}%`);
+    });
 
-  isLoaded = true;
-  return ffmpeg;
+    onProgress?.('Loading converter...');
+
+    try {
+      // Use single-threaded version (no SharedArrayBuffer needed)
+      const baseURL = 'https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/esm';
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      });
+    } catch (error) {
+      console.error('Failed to load FFmpeg:', error);
+      isLoading = false;
+      loadPromise = null;
+      throw error;
+    }
+
+    return ffmpeg;
+  })();
+
+  return loadPromise;
 }
 
 /**

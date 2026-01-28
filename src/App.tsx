@@ -19,7 +19,6 @@ import MobileLanding from './components/MobileLanding';
 import WelcomeModal from './components/WelcomeModal';
 import type { RecordingSettings } from './components/SettingsPanel';
 import { initAnalytics, trackPageView, trackRecordingStarted, trackRecordingCompleted, trackRecordingCancelled, trackTeleprompterUsed, trackSettingsChanged } from './utils/analytics';
-import { convertWebMToMP4 } from './utils/videoConverter';
 import './App.css';
 
 // Initialize analytics once when module loads
@@ -74,8 +73,6 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false); // Preview mode before recording
   const [isPaused, setIsPaused] = useState(false); // Pause state during recording
-  const [isConverting, setIsConverting] = useState(false);
-  const [convertingMessage, setConvertingMessage] = useState('');
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
   const [bubblePosition, setBubblePosition] = useState({ x: 20, y: 100 });
   const [showSettings, setShowSettings] = useState(false);
@@ -550,36 +547,14 @@ function App() {
     mediaRecorder.onstop = async () => {
       const webmBlob = new Blob(recordedChunksRef.current, { type: mimeType });
 
-      // Convert WebM to MP4
-      setIsConverting(true);
-      setConvertingMessage('Starting conversion...');
-
-      try {
-        const mp4Blob = await convertWebMToMP4(webmBlob, (message) => {
-          setConvertingMessage(message);
-        });
-
-        // Download the MP4
-        const url = URL.createObjectURL(mp4Blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `excalicord-${Date.now()}.mp4`;
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch (error) {
-        console.error('Conversion failed:', error);
-        // Fallback: download as WebM if conversion fails
-        const url = URL.createObjectURL(webmBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `excalicord-${Date.now()}.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
-        alert('MP4 conversion failed. Video saved as WebM instead.');
-      } finally {
-        setIsConverting(false);
-        setConvertingMessage('');
-      }
+      // Download as WebM directly - it's widely compatible
+      // (VLC, Chrome, Firefox, Edge, and most modern video players/editors)
+      const url = URL.createObjectURL(webmBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `excalicord-${Date.now()}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
     };
 
     // Start rendering loop first to ensure we have frames ready
@@ -832,8 +807,7 @@ function App() {
         isRecording={isRecording}
         isPreviewing={isPreviewing}
         isPaused={isPaused}
-        isConverting={isConverting}
-        convertingMessage={convertingMessage}
+        isConverting={false}
         showCursor={settings.showCursor}
         onStartRecording={enterPreviewMode}
         onStopRecording={stopRecording}

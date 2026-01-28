@@ -41,7 +41,9 @@ async function loadFFmpeg(onProgress?: (message: string) => void): Promise<FFmpe
     });
 
     ffmpeg.on('progress', ({ progress }) => {
-      const percent = Math.round(progress * 100);
+      // Clamp progress to valid range (FFmpeg sometimes reports weird values)
+      const clampedProgress = Math.max(0, Math.min(1, progress));
+      const percent = Math.round(clampedProgress * 100);
       onProgress?.(`Converting: ${percent}%`);
     });
 

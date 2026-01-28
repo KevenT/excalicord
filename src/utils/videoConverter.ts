@@ -49,7 +49,7 @@ async function loadFFmpeg(onProgress?: (message: string) => void): Promise<FFmpe
 
     try {
       // Use single-threaded version (no SharedArrayBuffer needed)
-      const baseURL = 'https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/esm';
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
       await ffmpeg.load({
         coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
         wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
@@ -87,22 +87,34 @@ export async function convertWebMToMP4(
 
   onProgress?.('Converting to MP4...');
 
-  // Convert WebM to MP4 with good quality settings
-  // -c:v libx264 = H.264 video codec (universal compatibility)
-  // -preset fast = balance between speed and compression
-  // -crf 23 = quality level (lower = better, 18-28 is good range)
-  // -c:a aac = AAC audio codec
-  // -movflags +faststart = optimize for web streaming
-  await ff.exec([
-    '-i', 'input.webm',
-    '-c:v', 'libx264',
-    '-preset', 'fast',
-    '-crf', '23',
-    '-c:a', 'aac',
-    '-b:a', '128k',
-    '-movflags', '+faststart',
-    'output.mp4'
-  ]);
+  // Convert WebM to MP4
+  // Try libx264 first (best quality), fall back to mpeg4 if not available
+  // Some ffmpeg.wasm builds don't include libx264 due to GPL licensing
+  try {
+    await ff.exec([
+      '-i', 'input.webm',
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      '-crf', '23',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-movflags', '+faststart',
+      'output.mp4'
+    ]);
+  } catch {
+    // Fallback to mpeg4 codec if libx264 is not available
+    console.log('[FFmpeg] libx264 not available, trying mpeg4...');
+    onProgress?.('Converting to MP4 (fallback)...');
+    await ff.exec([
+      '-i', 'input.webm',
+      '-c:v', 'mpeg4',
+      '-q:v', '5',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-movflags', '+faststart',
+      'output.mp4'
+    ]);
+  }
 
   onProgress?.('Finalizing...');
 

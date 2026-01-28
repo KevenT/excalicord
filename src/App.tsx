@@ -523,13 +523,12 @@ function App() {
       ...audioTracks
     ]);
 
-    // Use WebM - most reliable format for browser recording
-    // MP4 recording is buggy in most browsers and produces unplayable files
+    // Try MP4 first (best compatibility), fall back to WebM
     let mimeType = 'video/webm';
-    if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
+    if (MediaRecorder.isTypeSupported('video/mp4')) {
+      mimeType = 'video/mp4';
+    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
       mimeType = 'video/webm;codecs=vp9,opus';
-    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
-      mimeType = 'video/webm;codecs=vp8,opus';
     }
 
     const mediaRecorder = new MediaRecorder(combinedStream, {
@@ -545,14 +544,14 @@ function App() {
     };
 
     mediaRecorder.onstop = async () => {
-      const webmBlob = new Blob(recordedChunksRef.current, { type: mimeType });
+      const isMP4 = mimeType.includes('mp4');
+      const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+      const extension = isMP4 ? 'mp4' : 'webm';
 
-      // Download as WebM directly - it's widely compatible
-      // (VLC, Chrome, Firefox, Edge, and most modern video players/editors)
-      const url = URL.createObjectURL(webmBlob);
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `excalicord-${Date.now()}.webm`;
+      a.download = `excalicord-${Date.now()}.${extension}`;
       a.click();
       URL.revokeObjectURL(url);
     };

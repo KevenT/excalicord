@@ -19,6 +19,7 @@ import MobileLanding from './components/MobileLanding';
 import WelcomeModal from './components/WelcomeModal';
 import type { RecordingSettings } from './components/SettingsPanel';
 import { initAnalytics, trackPageView, trackRecordingStarted, trackRecordingCompleted, trackRecordingCancelled, trackTeleprompterUsed, trackSettingsChanged } from './utils/analytics';
+import { WebCodecsRecorder, isWebCodecsSupported } from './utils/webCodecsRecorder';
 import './App.css';
 
 // Initialize analytics once when module loads
@@ -91,8 +92,7 @@ function App() {
   const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
   const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
+  const webCodecsRecorderRef = useRef<WebCodecsRecorder | null>(null);
 
   // Refs for animation loop
   const isRecordingRef = useRef(false);
@@ -470,6 +470,11 @@ function App() {
       ctx.restore();
     }
 
+    // Add frame to WebCodecs recorder if recording
+    if (isRecordingRef.current && webCodecsRecorderRef.current && canvas) {
+      webCodecsRecorderRef.current.addFrame(canvas);
+    }
+
     if (isRecordingRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderCompositeFrame);
     }
@@ -518,108 +523,37 @@ function App() {
     canvas.width = width;
     canvas.height = height;
 
-    const canvasStream = canvas.captureStream(30);
-    const audioTracks = webcamStream?.getAudioTracks() || [];
-    const combinedStream = new MediaStream([
-      ...canvasStream.getVideoTracks(),
-      ...audioTracks
-    ]);
+    // Check if WebCodecs is supported (Chrome, Edge, Safari 16.4+)
+    const useWebCodecs = isWebCodecsSupported();
+    console.log('[Recording] WebCodecs supported:', useWebCodecs);
 
-    // Determine the best recording format
-    // Chrome's MP4 support is broken - always produces corrupt files
-    // Safari has proper MP4 support, so use it there
-    // For Chrome/Firefox, use WebM which works perfectly
-    let mimeType = 'video/webm';
+    if (useWebCodecs) {
+      // Use WebCodecs for direct MP4 recording (fast, no conversion needed)
+      const recorder = new WebCodecsRecorder({
+        width,
+        height,
+        frameRate: 30,
+        videoBitrate: 5_000_000,
+        audioStream: webcamStream || undefined,
+      });
 
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-    if (isSafari && MediaRecorder.isTypeSupported('video/mp4')) {
-      // Safari has reliable MP4 recording
-      mimeType = 'video/mp4';
-    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
-      mimeType = 'video/webm;codecs=vp9,opus';
-    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
-      mimeType = 'video/webm;codecs=vp8,opus';
-    }
-
-    console.log('[Recording] Browser:', isSafari ? 'Safari' : 'Chrome/Other', '| Format:', mimeType);
-
-    const mediaRecorder = new MediaRecorder(combinedStream, {
-      mimeType,
-      videoBitsPerSecond: 5000000 // 5 Mbps for good quality
-    });
-
-    mediaRecorderRef.current = mediaRecorder;
-    recordedChunksRef.current = [];
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunksRef.current.push(e.data);
-    };
-
-    mediaRecorder.onstop = async () => {
-      const isMP4Native = mimeType.includes('mp4');
-      const blob = new Blob(recordedChunksRef.current, { type: mimeType });
-
-      // If Safari recorded as MP4, download directly
-      if (isMP4Native) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `excalicord-${Date.now()}.mp4`;
-        a.click();
-        URL.revokeObjectURL(url);
-        return;
-      }
-
-      // For WebM recordings, convert to MP4 server-side
-      setIsConverting(true);
-      setConvertingMessage('Uploading video...');
+      webCodecsRecorderRef.current = recorder;
 
       try {
-        // Send WebM to server for conversion
-        const response = await fetch('/api/convert-video', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'video/webm',
-          },
-          body: blob,
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.message || 'Conversion failed');
-        }
-
-        setConvertingMessage('Downloading MP4...');
-
-        // Get the MP4 blob from response
-        const mp4Blob = await response.blob();
-
-        // Download the MP4
-        const url = URL.createObjectURL(mp4Blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `excalicord-${Date.now()}.mp4`;
-        a.click();
-        URL.revokeObjectURL(url);
-
+        await recorder.start();
+        console.log('[Recording] WebCodecs recorder started');
       } catch (error) {
-        console.error('Server conversion failed:', error);
-        // Fallback: download as WebM
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `excalicord-${Date.now()}.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
-        alert('MP4 conversion failed. Video saved as WebM instead.\n\nYou can convert it at cloudconvert.com');
-      } finally {
-        setIsConverting(false);
-        setConvertingMessage('');
+        console.error('[Recording] WebCodecs failed to start:', error);
+        alert('Failed to start recording. Your browser may not support WebCodecs.');
+        return;
       }
-    };
+    } else {
+      // Fallback: WebM recording (will need conversion)
+      console.log('[Recording] Falling back to MediaRecorder (WebM)');
+      alert('Your browser does not support WebCodecs. Recording will be saved as WebM.');
+    }
 
-    // Start rendering loop first to ensure we have frames ready
+    // Start rendering loop
     setIsRecording(true);
 
     // Track recording started
@@ -630,10 +564,10 @@ function App() {
       aspectRatio: settings.aspectRatio,
       background: settings.backgroundId || 'custom',
       webcamEnabled: settings.showCamera,
-      webcamPosition: 'bottom-right' // Currently fixed position
+      webcamPosition: 'bottom-right'
     });
 
-    // Render a few frames before starting the recorder to avoid black first frame
+    // Render a few frames before starting
     const preRenderFrames = () => {
       renderCompositeFrame();
       renderCompositeFrame();
@@ -643,12 +577,8 @@ function App() {
     setTimeout(() => {
       preRenderFrames();
       animationFrameRef.current = requestAnimationFrame(renderCompositeFrame);
-      // Small delay after pre-rendering to ensure canvas has content
-      setTimeout(() => {
-        mediaRecorder.start(1000);
-      }, 100);
     }, 100);
-  }, [webcamStream, renderCompositeFrame, getRecordingDimensions]);
+  }, [webcamStream, renderCompositeFrame, getRecordingDimensions, showTeleprompter, settings]);
 
   // Handle dragging the recording frame during preview
   const handleFrameDrag = useCallback((e: React.MouseEvent) => {
@@ -773,22 +703,23 @@ function App() {
 
   // Pause/Resume recording
   const togglePause = useCallback(() => {
-    if (!mediaRecorderRef.current) return;
+    const recorder = webCodecsRecorderRef.current;
+    if (!recorder) return;
 
     if (isPaused) {
       // Resume recording
-      mediaRecorderRef.current.resume();
+      recorder.resume();
       setIsPaused(false);
     } else {
       // Pause recording - track that pause was used
       usedPauseRef.current = true;
-      mediaRecorderRef.current.pause();
+      recorder.pause();
       setIsPaused(true);
     }
   }, [isPaused]);
 
   // Stop recording
-  const stopRecording = useCallback(() => {
+  const stopRecording = useCallback(async () => {
     // Track recording completed with duration
     if (recordingStartTimeRef.current) {
       const durationSeconds = Math.round((Date.now() - recordingStartTimeRef.current) / 1000);
@@ -812,8 +743,32 @@ function App() {
       animationFrameRef.current = null;
     }
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+    // Stop WebCodecs recorder and get the MP4 blob
+    const recorder = webCodecsRecorderRef.current;
+    if (recorder && recorder.recording) {
+      setIsConverting(true);
+      setConvertingMessage('Finalizing video...');
+
+      try {
+        const mp4Blob = await recorder.stop();
+
+        // Download the MP4
+        const url = URL.createObjectURL(mp4Blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `excalicord-${Date.now()}.mp4`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        console.log('[Recording] MP4 saved, size:', (mp4Blob.size / 1024 / 1024).toFixed(2), 'MB');
+      } catch (error) {
+        console.error('[Recording] Failed to stop recorder:', error);
+        alert('Failed to save recording. Please try again.');
+      } finally {
+        setIsConverting(false);
+        setConvertingMessage('');
+        webCodecsRecorderRef.current = null;
+      }
     }
   }, []);
 

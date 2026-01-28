@@ -523,25 +523,24 @@ function App() {
       ...audioTracks
     ]);
 
-    // Try MP4 with proper codecs first, fall back to WebM
-    // Note: Chrome's generic 'video/mp4' support is buggy, need specific codecs
+    // Determine the best recording format
+    // Chrome's MP4 support is broken - always produces corrupt files
+    // Safari has proper MP4 support, so use it there
+    // For Chrome/Firefox, use WebM which works perfectly
     let mimeType = 'video/webm';
 
-    // Check for proper MP4 with H.264 + AAC
-    // Use avc3 instead of avc1 - avc3 allows resolution changes during recording
-    if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc3.42E01E,mp4a.40.2')) {
-      mimeType = 'video/mp4;codecs=avc3.42E01E,mp4a.40.2';
-    } else if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.42E01E,mp4a.40.2')) {
-      mimeType = 'video/mp4;codecs=avc1.42E01E,mp4a.40.2';
-    } else if (MediaRecorder.isTypeSupported('video/mp4;codecs=h264,aac')) {
-      mimeType = 'video/mp4;codecs=h264,aac';
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+    if (isSafari && MediaRecorder.isTypeSupported('video/mp4')) {
+      // Safari has reliable MP4 recording
+      mimeType = 'video/mp4';
     } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
       mimeType = 'video/webm;codecs=vp9,opus';
     } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
       mimeType = 'video/webm;codecs=vp8,opus';
     }
 
-    console.log('[Recording] Using format:', mimeType);
+    console.log('[Recording] Browser:', isSafari ? 'Safari' : 'Chrome/Other', '| Format:', mimeType);
 
     const mediaRecorder = new MediaRecorder(combinedStream, {
       mimeType,

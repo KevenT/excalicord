@@ -527,8 +527,11 @@ function App() {
     // Note: Chrome's generic 'video/mp4' support is buggy, need specific codecs
     let mimeType = 'video/webm';
 
-    // Check for proper MP4 with H.264 + AAC (Safari, some Chrome versions)
-    if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.42E01E,mp4a.40.2')) {
+    // Check for proper MP4 with H.264 + AAC
+    // Use avc3 instead of avc1 - avc3 allows resolution changes during recording
+    if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc3.42E01E,mp4a.40.2')) {
+      mimeType = 'video/mp4;codecs=avc3.42E01E,mp4a.40.2';
+    } else if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.42E01E,mp4a.40.2')) {
       mimeType = 'video/mp4;codecs=avc1.42E01E,mp4a.40.2';
     } else if (MediaRecorder.isTypeSupported('video/mp4;codecs=h264,aac')) {
       mimeType = 'video/mp4;codecs=h264,aac';

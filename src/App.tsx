@@ -523,13 +523,22 @@ function App() {
       ...audioTracks
     ]);
 
-    // Try MP4 first (best compatibility), fall back to WebM
+    // Try MP4 with proper codecs first, fall back to WebM
+    // Note: Chrome's generic 'video/mp4' support is buggy, need specific codecs
     let mimeType = 'video/webm';
-    if (MediaRecorder.isTypeSupported('video/mp4')) {
-      mimeType = 'video/mp4';
+
+    // Check for proper MP4 with H.264 + AAC (Safari, some Chrome versions)
+    if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.42E01E,mp4a.40.2')) {
+      mimeType = 'video/mp4;codecs=avc1.42E01E,mp4a.40.2';
+    } else if (MediaRecorder.isTypeSupported('video/mp4;codecs=h264,aac')) {
+      mimeType = 'video/mp4;codecs=h264,aac';
     } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
       mimeType = 'video/webm;codecs=vp9,opus';
+    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+      mimeType = 'video/webm;codecs=vp8,opus';
     }
+
+    console.log('[Recording] Using format:', mimeType);
 
     const mediaRecorder = new MediaRecorder(combinedStream, {
       mimeType,

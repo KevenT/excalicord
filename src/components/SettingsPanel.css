@@ -120,6 +120,64 @@
   color: #a8a29e;
 }
 
+/* Recording source */
+.source-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.source-btn {
+  background: #ffffff;
+  border: 1.5px solid #e7e5e4;
+  border-radius: 12px;
+  padding: 12px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.source-btn:hover {
+  border-color: #d6d3d1;
+  background: #fafaf9;
+}
+
+.source-btn.active {
+  border-color: #292524;
+  background: #292524;
+}
+
+.source-btn.active .source-name,
+.source-btn.active .source-desc {
+  color: #ffffff;
+}
+
+.source-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1c1917;
+}
+
+.source-desc {
+  font-size: 11px;
+  color: #a8a29e;
+}
+
+.desktop-mode-note {
+  margin-top: 10px;
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e7e5e4;
+  background: #fafaf9;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #57534e;
+}
+
 /* Aspect Ratio Grid */
 .aspect-grid {
   display: grid;
@@ -382,6 +440,10 @@
   cursor: pointer;
   font-size: 14px;
   color: #44403c;
+}
+
+.toggle-label + .toggle-label {
+  margin-top: 10px;
 }
 
 .toggle-label input {

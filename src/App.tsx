@@ -42,6 +42,7 @@ const isMobileDevice = () => {
 
 // Default settings
 const DEFAULT_SETTINGS: RecordingSettings = {
+  recordingSource: 'composite',
   aspectRatio: '16:9',
   customWidth: 1920,
   customHeight: 1080,
@@ -58,6 +59,7 @@ const DEFAULT_SETTINGS: RecordingSettings = {
   titlePosition: 'bottom-left',
   showCamera: true,
   recordAudio: true,
+  recordSystemAudio: true,
 };
 
 function App() {
@@ -101,9 +103,14 @@ function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaRecorderChunksRef = useRef<Blob[]>([]);
   const mediaRecorderStreamRef = useRef<MediaStream | null>(null);
+  const displayStreamRef = useRef<MediaStream | null>(null);
+  const desktopMicStreamRef = useRef<MediaStream | null>(null);
+  const desktopAudioContextRef = useRef<AudioContext | null>(null);
+  const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
 
   // Refs for animation loop
   const isRecordingRef = useRef(false);
+  const activeRecordingSourceRef = useRef<'composite' | 'desktop'>('composite');
   const bubblePositionRef = useRef({ x: 20, y: 100 });
   const settingsRef = useRef(settings);
   const recordingFrameRef = useRef<{x: number, y: number, width: number, height: number} | null>(null);
@@ -299,22 +306,47 @@ function App() {
     return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? null;
   }, []);
 
-  const startMediaRecorder = useCallback((
-    canvas: HTMLCanvasElement,
-    includeAudio: boolean,
+  const closeDesktopAudioContext = useCallback(async () => {
+    const audioContext = desktopAudioContextRef.current;
+    desktopAudioContextRef.current = null;
+
+    if (!audioContext || audioContext.state === 'closed') {
+      return;
+    }
+
+    try {
+      await audioContext.close();
+    } catch (error) {
+      console.warn('[DesktopCapture] Failed to close AudioContext:', error);
+    }
+  }, []);
+
+  const cleanupDesktopCapture = useCallback(async () => {
+    const displayStream = displayStreamRef.current;
+    const micStream = desktopMicStreamRef.current;
+
+    if (displayStream) {
+      displayStream.getTracks().forEach((track) => {
+        track.onended = null;
+        track.stop();
+      });
+    }
+    if (micStream) {
+      micStream.getTracks().forEach((track) => track.stop());
+    }
+
+    displayStreamRef.current = null;
+    desktopMicStreamRef.current = null;
+
+    await closeDesktopAudioContext();
+  }, [closeDesktopAudioContext]);
+
+  const startMediaRecorderFromStream = useCallback((
+    stream: MediaStream,
     videoBitrate: number
   ) => {
     if (typeof MediaRecorder === 'undefined') {
       return false;
-    }
-
-    const stream = canvas.captureStream(30);
-    const audioTrack = includeAudio
-      ? webcamStream?.getAudioTracks().find((track) => track.readyState === 'live')
-      : undefined;
-
-    if (audioTrack) {
-      stream.addTrack(audioTrack.clone());
     }
 
     const mimeType = getSupportedWebMMimeType();
@@ -324,7 +356,7 @@ function App() {
       if (mimeType) {
         recorderOptions.mimeType = mimeType;
       }
-      if (includeAudio) {
+      if (stream.getAudioTracks().length > 0) {
         recorderOptions.audioBitsPerSecond = 192_000;
       }
 
@@ -347,7 +379,72 @@ function App() {
       mediaRecorderChunksRef.current = [];
       return false;
     }
-  }, [getSupportedWebMMimeType, webcamStream]);
+  }, [getSupportedWebMMimeType]);
+
+  const startMediaRecorder = useCallback((
+    canvas: HTMLCanvasElement,
+    includeAudio: boolean,
+    videoBitrate: number
+  ) => {
+    if (typeof MediaRecorder === 'undefined') {
+      return false;
+    }
+
+    const stream = canvas.captureStream(30);
+    const audioTrack = includeAudio
+      ? webcamStream?.getAudioTracks().find((track) => track.readyState === 'live')
+      : undefined;
+
+    if (audioTrack) {
+      stream.addTrack(audioTrack.clone());
+    }
+
+    return startMediaRecorderFromStream(stream, videoBitrate);
+  }, [startMediaRecorderFromStream, webcamStream]);
+
+  const mixDesktopAudioTracks = useCallback(async (
+    systemAudioTrack: MediaStreamTrack,
+    micAudioTrack: MediaStreamTrack
+  ): Promise<MediaStreamTrack | null> => {
+    if (typeof AudioContext === 'undefined') {
+      return null;
+    }
+
+    await closeDesktopAudioContext();
+
+    try {
+      const audioContext = new AudioContext();
+      desktopAudioContextRef.current = audioContext;
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+
+      const destination = audioContext.createMediaStreamDestination();
+      const systemSource = audioContext.createMediaStreamSource(new MediaStream([systemAudioTrack]));
+      const micSource = audioContext.createMediaStreamSource(new MediaStream([micAudioTrack]));
+      const systemGain = audioContext.createGain();
+      const micGain = audioContext.createGain();
+
+      systemGain.gain.value = 1;
+      micGain.gain.value = 1;
+
+      systemSource.connect(systemGain);
+      micSource.connect(micGain);
+      systemGain.connect(destination);
+      micGain.connect(destination);
+
+      const mixedTrack = destination.stream.getAudioTracks()[0] ?? null;
+      if (!mixedTrack) {
+        await closeDesktopAudioContext();
+      }
+
+      return mixedTrack;
+    } catch (error) {
+      console.warn('[DesktopCapture] Audio mixing unavailable, falling back to a single track:', error);
+      await closeDesktopAudioContext();
+      return null;
+    }
+  }, [closeDesktopAudioContext]);
 
   const stopMediaRecorder = useCallback(async (): Promise<Blob | null> => {
     const recorder = mediaRecorderRef.current;
@@ -395,6 +492,12 @@ function App() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    return () => {
+      void cleanupDesktopCapture();
+    };
+  }, [cleanupDesktopCapture]);
 
   // Parse gradient for canvas drawing
   const parseGradient = (ctx: CanvasRenderingContext2D, gradientStr: string, width: number, height: number) => {
@@ -785,6 +888,118 @@ function App() {
     setBubblePosition({ x: constrainedX, y: constrainedY });
   }, []);
 
+  const startDesktopCaptureRecording = useCallback(async () => {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      alert('Desktop capture is not supported in this browser.');
+      return;
+    }
+
+    await cleanupDesktopCapture();
+
+    let displayStream: MediaStream;
+    try {
+      displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: settings.recordSystemAudio
+      });
+    } catch (error) {
+      const name = error instanceof DOMException ? error.name : '';
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        console.error('[DesktopCapture] Failed to start display capture:', error);
+        alert('Failed to start desktop capture. Please try again.');
+      }
+      return;
+    }
+
+    displayStreamRef.current = displayStream;
+
+    const displayVideoTrack = displayStream.getVideoTracks().find((track) => track.readyState === 'live');
+    if (!displayVideoTrack) {
+      await cleanupDesktopCapture();
+      alert('No video track was captured. Please choose a screen, window, or tab.');
+      return;
+    }
+
+    let micAudioTrack: MediaStreamTrack | null = null;
+    if (settings.recordAudio) {
+      micAudioTrack = webcamStream?.getAudioTracks().find((track) => track.readyState === 'live') ?? null;
+
+      if (!micAudioTrack) {
+        try {
+          const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          desktopMicStreamRef.current = micStream;
+          micAudioTrack = micStream.getAudioTracks().find((track) => track.readyState === 'live') ?? null;
+        } catch (error) {
+          console.warn('[DesktopCapture] Microphone unavailable:', error);
+        }
+      }
+    }
+
+    const systemAudioTrack = settings.recordSystemAudio
+      ? displayStream.getAudioTracks().find((track) => track.readyState === 'live') ?? null
+      : null;
+
+    const recordingStream = new MediaStream([displayVideoTrack]);
+    let recorderAudioTrack: MediaStreamTrack | null = null;
+
+    if (settings.recordAudio && settings.recordSystemAudio && micAudioTrack && systemAudioTrack) {
+      recorderAudioTrack = await mixDesktopAudioTracks(systemAudioTrack, micAudioTrack);
+      if (!recorderAudioTrack) {
+        recorderAudioTrack = micAudioTrack.clone();
+        alert('Could not mix system audio and microphone. Recording microphone only.');
+      }
+    }
+
+    if (!recorderAudioTrack) {
+      if (settings.recordAudio && micAudioTrack) {
+        recorderAudioTrack = micAudioTrack.clone();
+      } else if (settings.recordSystemAudio && systemAudioTrack) {
+        recorderAudioTrack = systemAudioTrack.clone();
+      }
+    }
+
+    if (recorderAudioTrack) {
+      recordingStream.addTrack(recorderAudioTrack);
+    } else if (settings.recordAudio || settings.recordSystemAudio) {
+      alert('No audio track is available for this capture. Recording will continue without audio.');
+    }
+
+    const trackSettings = displayVideoTrack.getSettings();
+    const width = trackSettings.width ?? 1920;
+    const height = trackSettings.height ?? 1080;
+    const targetVideoBitrate = Math.min(24_000_000, Math.max(10_000_000, Math.round((width * height * 30) / 5)));
+
+    const mediaRecorderStarted = startMediaRecorderFromStream(recordingStream, targetVideoBitrate);
+    if (!mediaRecorderStarted) {
+      await cleanupDesktopCapture();
+      alert('Failed to start recording. Please try again.');
+      return;
+    }
+
+    displayVideoTrack.onended = () => {
+      if (isRecordingRef.current) {
+        void stopRecordingRef.current?.();
+      }
+    };
+
+    activeRecordingSourceRef.current = 'desktop';
+    recordingStartTimeRef.current = Date.now();
+    usedTeleprompterRef.current = showTeleprompter;
+    usedPauseRef.current = false;
+    setIsPreviewing(false);
+    setRecordingFrame(null);
+    setIsPaused(false);
+    setIsRecording(true);
+
+    trackRecordingStarted({
+      aspectRatio: settings.aspectRatio,
+      background: 'desktop_capture',
+      webcamEnabled: false,
+      webcamPosition: 'none',
+      recordingSource: 'desktop',
+    });
+  }, [cleanupDesktopCapture, mixDesktopAudioTracks, settings, showTeleprompter, startMediaRecorderFromStream, webcamStream]);
+
   // Enter preview mode - show frame for positioning before recording
   const enterPreviewMode = useCallback(() => {
     const frame = calculateRecordingFrame();
@@ -797,6 +1012,14 @@ function App() {
 
     setIsPreviewing(true);
   }, [calculateRecordingFrame, snapBubbleToFrame]);
+
+  const startRecording = useCallback(() => {
+    if (settings.recordingSource === 'desktop') {
+      void startDesktopCaptureRecording();
+      return;
+    }
+    enterPreviewMode();
+  }, [enterPreviewMode, settings.recordingSource, startDesktopCaptureRecording]);
 
   // Cancel preview mode
   const cancelPreview = useCallback(() => {
@@ -811,6 +1034,7 @@ function App() {
     const targetVideoBitrate = Math.min(24_000_000, Math.max(10_000_000, Math.round((width * height * 30) / 5)));
 
     setIsPreviewing(false);
+    activeRecordingSourceRef.current = 'composite';
 
     let canvas = compositeCanvasRef.current;
     if (!canvas) {
@@ -873,7 +1097,8 @@ function App() {
       aspectRatio: settings.aspectRatio,
       background: settings.backgroundId || 'custom',
       webcamEnabled: settings.showCamera,
-      webcamPosition: 'bottom-right'
+      webcamPosition: 'bottom-right',
+      recordingSource: 'composite',
     });
 
     // Render a few frames before starting
@@ -1034,16 +1259,24 @@ function App() {
 
   // Stop recording
   const stopRecording = useCallback(async () => {
+    if (!isRecordingRef.current) {
+      return;
+    }
+    isRecordingRef.current = false;
+
+    const recordingSource = activeRecordingSourceRef.current;
+
     // Track recording completed with duration
     if (recordingStartTimeRef.current) {
       const durationSeconds = Math.round((Date.now() - recordingStartTimeRef.current) / 1000);
       trackRecordingCompleted({
         durationSeconds,
         aspectRatio: settingsRef.current.aspectRatio,
-        background: settingsRef.current.backgroundId || 'custom',
-        webcamEnabled: settingsRef.current.showCamera,
+        background: recordingSource === 'desktop' ? 'desktop_capture' : settingsRef.current.backgroundId || 'custom',
+        webcamEnabled: recordingSource === 'composite' ? settingsRef.current.showCamera : false,
         usedTeleprompter: usedTeleprompterRef.current,
-        usedPause: usedPauseRef.current
+        usedPause: usedPauseRef.current,
+        recordingSource,
       });
       recordingStartTimeRef.current = null;
     }
@@ -1060,6 +1293,22 @@ function App() {
 
     setIsConverting(true);
     setConvertingMessage('Finalizing video...');
+
+    if (recordingSource === 'desktop') {
+      const desktopBlob = await stopMediaRecorder();
+      await cleanupDesktopCapture();
+
+      if (desktopBlob) {
+        downloadBlob(desktopBlob, 'webm');
+        console.log('[Recording] Desktop WebM saved, size:', (desktopBlob.size / 1024 / 1024).toFixed(2), 'MB');
+      } else {
+        alert('Failed to save recording. Please try again.');
+      }
+
+      setIsConverting(false);
+      setConvertingMessage('');
+      return;
+    }
 
     const recorder = webCodecsRecorderRef.current;
     let mp4Blob: Blob | null = null;
@@ -1098,7 +1347,11 @@ function App() {
 
     setIsConverting(false);
     setConvertingMessage('');
-  }, [downloadBlob, stopMediaRecorder]);
+  }, [cleanupDesktopCapture, downloadBlob, stopMediaRecorder]);
+
+  useEffect(() => {
+    stopRecordingRef.current = stopRecording;
+  }, [stopRecording]);
 
   const handleBubbleDrag = useCallback((pos: { x: number; y: number }) => {
     const frame = recordingFrameRef.current;
@@ -1158,7 +1411,7 @@ function App() {
         isConverting={isConverting}
         convertingMessage={convertingMessage}
         showCursor={settings.showCursor}
-        onStartRecording={enterPreviewMode}
+        onStartRecording={startRecording}
         onStopRecording={stopRecording}
         onTogglePause={togglePause}
         onToggleCursor={() => setSettings(prev => ({ ...prev, showCursor: !prev.showCursor }))}
@@ -1192,6 +1445,12 @@ function App() {
           }
           if (newSettings.recordAudio !== settings.recordAudio) {
             trackSettingsChanged('audio', newSettings.recordAudio ? 'enabled' : 'disabled');
+          }
+          if (newSettings.recordingSource !== settings.recordingSource) {
+            trackSettingsChanged('recording_source', newSettings.recordingSource);
+          }
+          if (newSettings.recordSystemAudio !== settings.recordSystemAudio) {
+            trackSettingsChanged('system_audio', newSettings.recordSystemAudio ? 'enabled' : 'disabled');
           }
           setSettings(newSettings);
         }}

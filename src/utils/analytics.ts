@@ -51,6 +51,7 @@ export function trackRecordingStarted(settings: {
   background: string;
   webcamEnabled: boolean;
   webcamPosition: string;
+  recordingSource: 'composite' | 'desktop';
 }) {
   posthog.capture('recording_started', settings);
 }
@@ -63,6 +64,7 @@ export function trackRecordingCompleted(data: {
   webcamEnabled: boolean;
   usedTeleprompter: boolean;
   usedPause: boolean;
+  recordingSource: 'composite' | 'desktop';
 }) {
   posthog.capture('recording_completed', {
     ...data,

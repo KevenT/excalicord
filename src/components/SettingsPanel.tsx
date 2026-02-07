@@ -198,6 +198,7 @@ const ASPECT_RATIOS = [
 ];
 
 export interface RecordingSettings {
+  recordingSource: 'composite' | 'desktop';
   aspectRatio: string;
   customWidth: number;
   customHeight: number;
@@ -217,6 +218,7 @@ export interface RecordingSettings {
   showCamera: boolean;
   // Audio settings
   recordAudio: boolean;
+  recordSystemAudio: boolean;
 }
 
 interface SettingsPanelProps {
@@ -302,6 +304,33 @@ function SettingsPanel({ isOpen, settings, onSettingsChange, onClose }: Settings
         <div className="settings-header">
           <h2>Recording Settings</h2>
           <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+
+        {/* Recording Source */}
+        <div className="settings-section">
+          <h3>Recording Source</h3>
+          <div className="source-grid">
+            <button
+              className={`source-btn ${settings.recordingSource === 'composite' ? 'active' : ''}`}
+              onClick={() => onSettingsChange({ ...settings, recordingSource: 'composite' })}
+            >
+              <span className="source-name">Composite</span>
+              <span className="source-desc">Excalidraw + Camera</span>
+            </button>
+            <button
+              className={`source-btn ${settings.recordingSource === 'desktop' ? 'active' : ''}`}
+              onClick={() => onSettingsChange({ ...settings, recordingSource: 'desktop' })}
+            >
+              <span className="source-name">Desktop Capture</span>
+              <span className="source-desc">Screen / Window / Tab</span>
+            </button>
+          </div>
+          {settings.recordingSource === 'desktop' && (
+            <p className="desktop-mode-note">
+              Desktop mode records the shared screen directly. Background, corner radius, cursor effect,
+              title overlay, and camera bubble are ignored. You will choose the screen/window/tab each time.
+            </p>
+          )}
         </div>
 
         {/* Aspect Ratio */}
@@ -445,6 +474,15 @@ function SettingsPanel({ isOpen, settings, onSettingsChange, onClose }: Settings
             />
             <span className="toggle-switch"></span>
             Record microphone audio
+          </label>
+          <label className="toggle-label">
+            <input
+              type="checkbox"
+              checked={settings.recordSystemAudio}
+              onChange={e => onSettingsChange({ ...settings, recordSystemAudio: e.target.checked })}
+            />
+            <span className="toggle-switch"></span>
+            Record system audio (desktop mode)
           </label>
         </div>
 

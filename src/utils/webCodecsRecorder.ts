@@ -11,7 +11,7 @@ import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 
 // Check if WebCodecs is supported
 export function isWebCodecsSupported(): boolean {
-  return typeof VideoEncoder !== 'undefined' && typeof AudioEncoder !== 'undefined';
+  return typeof VideoEncoder !== 'undefined';
 }
 
 export interface WebCodecsRecorderOptions {
@@ -29,6 +29,7 @@ export class WebCodecsRecorder {
   private audioEncoder: AudioEncoder | null = null;
   private audioContext: AudioContext | null = null;
   private mediaStreamSource: MediaStreamAudioSourceNode | null = null;
+  private scriptProcessorNode: ScriptProcessorNode | null = null;
 
   private width: number;
   private height: number;
@@ -43,6 +44,7 @@ export class WebCodecsRecorder {
   private audioSampleRate: number = 48000;
   private warmupFrames: number = 5; // Skip first few frames for encoder warmup
   private audioTimestamp: number = 0;
+  private hasAudio: boolean = false;
 
   constructor(options: WebCodecsRecorderOptions) {
     this.width = options.width;
@@ -54,6 +56,9 @@ export class WebCodecsRecorder {
   }
 
   async start(): Promise<void> {
+    const videoCodec = await this.selectVideoCodec();
+    this.hasAudio = await this.shouldEnableAudio();
+
     // Create the MP4 muxer
     this.muxer = new Muxer({
       target: new ArrayBufferTarget(),
@@ -62,7 +67,7 @@ export class WebCodecsRecorder {
         width: this.width,
         height: this.height,
       },
-      audio: this.audioStream ? {
+      audio: this.hasAudio ? {
         codec: 'aac',
         numberOfChannels: 1,
         sampleRate: this.audioSampleRate,
@@ -80,10 +85,9 @@ export class WebCodecsRecorder {
     });
 
     // Configure video encoder with H.264
-    // Use High Profile Level 4.0 for 1080p support
-    // Level 4.0 supports up to 1920x1080 @ 30fps
+    // Try a codec explicitly reported as supported by the browser.
     this.videoEncoder.configure({
-      codec: 'avc1.640028', // H.264 High Profile Level 4.0
+      codec: videoCodec,
       width: this.width,
       height: this.height,
       bitrate: this.videoBitrate,
@@ -94,20 +98,88 @@ export class WebCodecsRecorder {
     // Wait for encoder to be ready
     await this.videoEncoder.flush();
 
-    // Set up audio encoding if we have an audio stream
-    if (this.audioStream) {
+    // Set up audio encoding only when a live audio track exists and encoder support is confirmed.
+    if (this.hasAudio) {
       await this.setupAudioEncoder();
     }
 
     this.frameCount = 0;
     this.isRecording = true;
     this.isPaused = false;
+    this.audioTimestamp = 0;
 
-    console.log('[WebCodecsRecorder] Started recording', this.width, 'x', this.height);
+    console.log('[WebCodecsRecorder] Started recording', this.width, 'x', this.height, 'audio:', this.hasAudio);
+  }
+
+  private async selectVideoCodec(): Promise<string> {
+    const candidates = [
+      'avc1.640028', // H.264 High Profile Level 4.0
+      'avc1.4d4028', // H.264 Main Profile Level 4.0
+      'avc1.42E028', // H.264 Baseline Profile Level 4.0
+    ];
+
+    const supportsFn = typeof VideoEncoder.isConfigSupported === 'function';
+    if (!supportsFn) {
+      return candidates[0];
+    }
+
+    for (const codec of candidates) {
+      try {
+        const support = await VideoEncoder.isConfigSupported({
+          codec,
+          width: this.width,
+          height: this.height,
+          bitrate: this.videoBitrate,
+          framerate: this.frameRate,
+          latencyMode: 'realtime',
+        });
+        if (support.supported) {
+          return codec;
+        }
+      } catch {
+        // Try the next candidate.
+      }
+    }
+
+    throw new Error('No supported H.264 codec configuration found for WebCodecs');
+  }
+
+  private async shouldEnableAudio(): Promise<boolean> {
+    if (!this.audioStream || typeof AudioEncoder === 'undefined') {
+      return false;
+    }
+
+    const audioTrack = this.audioStream.getAudioTracks().find((track) => track.readyState === 'live');
+    if (!audioTrack) {
+      return false;
+    }
+
+    const supportsFn = typeof AudioEncoder.isConfigSupported === 'function';
+    if (!supportsFn) {
+      return true;
+    }
+
+    try {
+      const support = await AudioEncoder.isConfigSupported({
+        codec: 'mp4a.40.2',
+        numberOfChannels: 1,
+        sampleRate: this.audioSampleRate,
+        bitrate: this.audioBitrate,
+      });
+      return Boolean(support.supported);
+    } catch {
+      return false;
+    }
   }
 
   private async setupAudioEncoder(): Promise<void> {
     if (!this.audioStream) return;
+
+    const audioTrack = this.audioStream.getAudioTracks().find((track) => track.readyState === 'live');
+    if (!audioTrack) {
+      console.warn('[WebCodecsRecorder] No live audio track found');
+      return;
+    }
 
     // Create audio encoder
     this.audioEncoder = new AudioEncoder({
@@ -126,12 +198,8 @@ export class WebCodecsRecorder {
 
     // Set up audio capture using AudioContext
     this.audioContext = new AudioContext({ sampleRate: this.audioSampleRate });
-
-    // Get audio track from stream
-    const audioTrack = this.audioStream.getAudioTracks()[0];
-    if (!audioTrack) {
-      console.warn('[WebCodecsRecorder] No audio track found');
-      return;
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
     }
 
     // Create media stream source
@@ -141,6 +209,7 @@ export class WebCodecsRecorder {
     // Use ScriptProcessorNode for audio capture (simpler than AudioWorklet)
     const bufferSize = 4096;
     const scriptNode = this.audioContext.createScriptProcessor(bufferSize, 1, 1);
+    this.scriptProcessorNode = scriptNode;
 
     scriptNode.onaudioprocess = (event) => {
       if (!this.isRecording || this.isPaused || !this.audioEncoder) return;
@@ -240,9 +309,18 @@ export class WebCodecsRecorder {
     }
 
     // Clean up audio
+    this.scriptProcessorNode?.disconnect();
+    this.mediaStreamSource?.disconnect();
+    this.scriptProcessorNode = null;
+    this.mediaStreamSource = null;
+
     if (this.audioContext) {
       await this.audioContext.close();
     }
+    this.audioContext = null;
+    this.audioEncoder = null;
+
+    this.videoEncoder = null;
 
     // Finalize the muxer
     if (!this.muxer) {
@@ -254,6 +332,7 @@ export class WebCodecsRecorder {
     // Get the MP4 data
     const { buffer } = this.muxer.target;
     const blob = new Blob([buffer], { type: 'video/mp4' });
+    this.muxer = null;
 
     console.log('[WebCodecsRecorder] Finished, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
 
@@ -266,5 +345,9 @@ export class WebCodecsRecorder {
 
   get paused(): boolean {
     return this.isPaused;
+  }
+
+  get audioEnabled(): boolean {
+    return this.hasAudio;
   }
 }

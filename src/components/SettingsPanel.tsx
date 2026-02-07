@@ -215,6 +215,8 @@ export interface RecordingSettings {
   titlePosition: 'bottom-left' | 'bottom-right';
   // Camera settings
   showCamera: boolean;
+  // Audio settings
+  recordAudio: boolean;
 }
 
 interface SettingsPanelProps {
@@ -430,6 +432,20 @@ function SettingsPanel({ isOpen, settings, onSettingsChange, onClose }: Settings
               </div>
             </div>
           )}
+        </div>
+
+        {/* Audio Settings */}
+        <div className="settings-section">
+          <h3>Audio</h3>
+          <label className="toggle-label">
+            <input
+              type="checkbox"
+              checked={settings.recordAudio}
+              onChange={e => onSettingsChange({ ...settings, recordAudio: e.target.checked })}
+            />
+            <span className="toggle-switch"></span>
+            Record microphone audio
+          </label>
         </div>
 
         {/* Padding */}

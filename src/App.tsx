@@ -22,6 +22,9 @@ import { initAnalytics, trackPageView, trackRecordingStarted, trackRecordingComp
 import { WebCodecsRecorder, isWebCodecsSupported } from './utils/webCodecsRecorder';
 import './App.css';
 
+const RECORDING_RENDER_FPS = 30;
+const RECORDING_FRAME_INTERVAL_MS = 1000 / RECORDING_RENDER_FPS;
+
 // Initialize analytics once when module loads
 initAnalytics();
 
@@ -54,6 +57,7 @@ const DEFAULT_SETTINGS: RecordingSettings = {
   titleText: '',
   titlePosition: 'bottom-left',
   showCamera: true,
+  recordAudio: true,
 };
 
 function App() {
@@ -85,14 +89,18 @@ function App() {
   const [teleprompterText, setTeleprompterText] = useState('');
   const [teleprompterPosition, setTeleprompterPosition] = useState({ x: window.innerWidth - 360, y: 80 });
   const [isTeleprompterDragging, setIsTeleprompterDragging] = useState(false);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
   // Refs
   const excalidrawApiRef = useRef<unknown>(null);
   const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
+  const teleprompterRef = useRef<HTMLDivElement | null>(null);
+  const cursorIndicatorRef = useRef<HTMLDivElement | null>(null);
   const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const webCodecsRecorderRef = useRef<WebCodecsRecorder | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaRecorderChunksRef = useRef<Blob[]>([]);
+  const mediaRecorderStreamRef = useRef<MediaStream | null>(null);
 
   // Refs for animation loop
   const isRecordingRef = useRef(false);
@@ -100,6 +108,13 @@ function App() {
   const settingsRef = useRef(settings);
   const recordingFrameRef = useRef<{x: number, y: number, width: number, height: number} | null>(null);
   const mousePositionRef = useRef({ x: 0, y: 0 });
+  const pointerVelocityRef = useRef({ vx: 0, vy: 0, ts: 0 });
+  const excalidrawContainerRectRef = useRef<DOMRect | null>(null);
+  const excalidrawWrapperRef = useRef<HTMLElement | null>(null);
+  const excalidrawContainerRef = useRef<HTMLElement | null>(null);
+  const excalidrawCanvasesRef = useRef<HTMLCanvasElement[]>([]);
+  const lastSceneQueryTimestampRef = useRef(0);
+  const lastRenderTimestampRef = useRef(0);
   const backgroundImageRef = useRef<HTMLImageElement | null>(null);
   const backgroundImageLoadedRef = useRef(false);
   const recordingStartTimeRef = useRef<number | null>(null);
@@ -111,18 +126,73 @@ function App() {
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { recordingFrameRef.current = recordingFrame; }, [recordingFrame]);
 
-  // Track mouse position for cursor effect during recording
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      mousePositionRef.current = { x: e.clientX, y: e.clientY };
-      // Also update state for live visual indicator (only during recording to avoid unnecessary renders)
-      if (isRecordingRef.current) {
-        setMousePosition({ x: e.clientX, y: e.clientY });
-      }
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+  const updateCursorIndicator = useCallback((x: number, y: number) => {
+    const indicator = cursorIndicatorRef.current;
+    if (!indicator) return;
+
+    const frame = recordingFrameRef.current;
+    const currentSettings = settingsRef.current;
+    const containerRect = excalidrawContainerRectRef.current;
+    const localX = x - (containerRect?.left ?? 0);
+    const localY = y - (containerRect?.top ?? 0);
+
+    const shouldShow = Boolean(
+      isRecordingRef.current &&
+      currentSettings.showCursor &&
+      frame &&
+      localX >= frame.x &&
+      localX <= frame.x + frame.width &&
+      localY >= frame.y &&
+      localY <= frame.y + frame.height
+    );
+
+    if (!shouldShow) {
+      indicator.style.opacity = '0';
+      return;
+    }
+
+    indicator.style.opacity = '1';
+    indicator.style.left = `${x}px`;
+    indicator.style.top = `${y}px`;
+    indicator.style.backgroundColor = `${currentSettings.cursorColor}80`;
   }, []);
+
+  const updatePointerPosition = useCallback((x: number, y: number) => {
+    const now = performance.now();
+    const prev = mousePositionRef.current;
+    const prevTs = pointerVelocityRef.current.ts || now;
+    const dt = Math.max(1, now - prevTs);
+
+    pointerVelocityRef.current = {
+      vx: (x - prev.x) / dt,
+      vy: (y - prev.y) / dt,
+      ts: now,
+    };
+
+    mousePositionRef.current = { x, y };
+    updateCursorIndicator(x, y);
+  }, [updateCursorIndicator]);
+
+  // Track pointer position for cursor effect during recording
+  useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
+      updatePointerPosition(e.clientX, e.clientY);
+    };
+    const handleMouseMove = (e: MouseEvent) => {
+      updatePointerPosition(e.clientX, e.clientY);
+    };
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [updatePointerPosition]);
+
+  useEffect(() => {
+    const { x, y } = mousePositionRef.current;
+    updateCursorIndicator(x, y);
+  }, [isRecording, recordingFrame, settings.showCursor, settings.cursorColor, updateCursorIndicator]);
 
   // Load background image when settings change
   useEffect(() => {
@@ -152,12 +222,15 @@ function App() {
 
   // Initialize webcam
   useEffect(() => {
+    let activeStream: MediaStream | null = null;
+
     async function initWebcam() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
           audio: true
         });
+        activeStream = stream;
         setWebcamStream(stream);
       } catch (err) {
         console.error('Failed to access webcam:', err);
@@ -165,7 +238,7 @@ function App() {
       }
     }
     initWebcam();
-    return () => { webcamStream?.getTracks().forEach(track => track.stop()); };
+    return () => { activeStream?.getTracks().forEach(track => track.stop()); };
   }, []);
 
   // Calculate recording frame dimensions to fit in viewport while maintaining aspect ratio
@@ -207,6 +280,122 @@ function App() {
     return ratio ? { width: ratio.width, height: ratio.height } : { width: 1920, height: 1080 };
   }, [settings]);
 
+  const downloadBlob = useCallback((blob: Blob, extension: 'mp4' | 'webm') => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `excalicord-${Date.now()}.${extension}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const getSupportedWebMMimeType = useCallback(() => {
+    if (typeof MediaRecorder === 'undefined') return null;
+    const candidates = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm',
+    ];
+    return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? null;
+  }, []);
+
+  const startMediaRecorder = useCallback((
+    canvas: HTMLCanvasElement,
+    includeAudio: boolean,
+    videoBitrate: number
+  ) => {
+    if (typeof MediaRecorder === 'undefined') {
+      return false;
+    }
+
+    const stream = canvas.captureStream(30);
+    const audioTrack = includeAudio
+      ? webcamStream?.getAudioTracks().find((track) => track.readyState === 'live')
+      : undefined;
+
+    if (audioTrack) {
+      stream.addTrack(audioTrack.clone());
+    }
+
+    const mimeType = getSupportedWebMMimeType();
+
+    try {
+      const recorderOptions: MediaRecorderOptions = { videoBitsPerSecond: videoBitrate };
+      if (mimeType) {
+        recorderOptions.mimeType = mimeType;
+      }
+      if (includeAudio) {
+        recorderOptions.audioBitsPerSecond = 192_000;
+      }
+
+      const recorder = new MediaRecorder(stream, recorderOptions);
+      mediaRecorderChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          mediaRecorderChunksRef.current.push(event.data);
+        }
+      };
+      recorder.start(1000);
+      mediaRecorderRef.current = recorder;
+      mediaRecorderStreamRef.current = stream;
+      return true;
+    } catch (error) {
+      console.error('[Recording] Failed to start MediaRecorder fallback:', error);
+      stream.getTracks().forEach((track) => track.stop());
+      mediaRecorderRef.current = null;
+      mediaRecorderStreamRef.current = null;
+      mediaRecorderChunksRef.current = [];
+      return false;
+    }
+  }, [getSupportedWebMMimeType, webcamStream]);
+
+  const stopMediaRecorder = useCallback(async (): Promise<Blob | null> => {
+    const recorder = mediaRecorderRef.current;
+    const stream = mediaRecorderStreamRef.current;
+
+    const cleanup = () => {
+      stream?.getTracks().forEach((track) => track.stop());
+      mediaRecorderRef.current = null;
+      mediaRecorderStreamRef.current = null;
+    };
+
+    if (!recorder) {
+      cleanup();
+      return null;
+    }
+
+    const buildBlob = () => {
+      const chunks = mediaRecorderChunksRef.current;
+      if (chunks.length === 0) return null;
+      return new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+    };
+
+    if (recorder.state === 'inactive') {
+      const blob = buildBlob();
+      cleanup();
+      return blob;
+    }
+
+    return new Promise((resolve) => {
+      const onStop = () => {
+        const blob = buildBlob();
+        cleanup();
+        resolve(blob);
+      };
+
+      recorder.addEventListener('stop', onStop, { once: true });
+
+      try {
+        recorder.stop();
+      } catch (error) {
+        console.error('[Recording] Failed to stop MediaRecorder fallback:', error);
+        recorder.removeEventListener('stop', onStop);
+        cleanup();
+        resolve(null);
+      }
+    });
+  }, []);
+
   // Parse gradient for canvas drawing
   const parseGradient = (ctx: CanvasRenderingContext2D, gradientStr: string, width: number, height: number) => {
     if (!gradientStr.includes('gradient')) {
@@ -233,11 +422,12 @@ function App() {
   };
 
   // Render loop
-  const renderCompositeFrame = useCallback(() => {
+  const renderCompositeFrame = useCallback((rafTimestamp?: number) => {
     const canvas = compositeCanvasRef.current;
     const ctx = canvas?.getContext('2d');
     const currentSettings = settingsRef.current;
     const frame = recordingFrameRef.current;
+    const now = typeof rafTimestamp === 'number' ? rafTimestamp : performance.now();
 
     if (!canvas || !ctx) {
       if (isRecordingRef.current) {
@@ -246,7 +436,36 @@ function App() {
       return;
     }
 
+    // Limit expensive compositing to target FPS during recording.
+    if (isRecordingRef.current && typeof rafTimestamp === 'number') {
+      const elapsed = now - lastRenderTimestampRef.current;
+      if (lastRenderTimestampRef.current && elapsed < RECORDING_FRAME_INTERVAL_MS) {
+        animationFrameRef.current = requestAnimationFrame(renderCompositeFrame);
+        return;
+      }
+      lastRenderTimestampRef.current = now;
+    }
+
     const padding = currentSettings.padding;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Cache expensive DOM queries and refresh periodically.
+    if (!excalidrawWrapperRef.current || !excalidrawContainerRef.current || (now - lastSceneQueryTimestampRef.current) > 300) {
+      excalidrawWrapperRef.current = document.querySelector('.excalidraw');
+      excalidrawContainerRef.current = document.querySelector('.excalidraw-container');
+      excalidrawCanvasesRef.current = excalidrawWrapperRef.current
+        ? Array.from(excalidrawWrapperRef.current.querySelectorAll('canvas'))
+        : [];
+      lastSceneQueryTimestampRef.current = now;
+    }
+
+    const excalidrawWrapper = excalidrawWrapperRef.current;
+    const container = excalidrawContainerRef.current;
+    const containerRect = container?.getBoundingClientRect();
+    if (containerRect) {
+      excalidrawContainerRectRef.current = containerRect;
+    }
 
     // Draw background (image, gradient, solid, or none)
     if (currentSettings.backgroundType === 'none' || currentSettings.background === 'none') {
@@ -304,11 +523,13 @@ function App() {
 
     // Draw drop shadow for content area (only if there's padding)
     if (padding > 0) {
+      const shadowBlur = isRecordingRef.current ? 14 : 80;
+      const shadowOffsetY = isRecordingRef.current ? 4 : 20;
       ctx.save();
       ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-      ctx.shadowBlur = 80;
+      ctx.shadowBlur = shadowBlur;
       ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 20;
+      ctx.shadowOffsetY = shadowOffsetY;
       ctx.fillStyle = '#ffffff';
       roundedRectPath(contentX, contentY, contentW, contentH, cornerRadius);
       ctx.fill();
@@ -326,19 +547,11 @@ function App() {
     ctx.clip();
 
     // Draw Excalidraw content - capture from the visible frame area
-    const excalidrawWrapper = document.querySelector('.excalidraw');
-    if (excalidrawWrapper && frame) {
-      const canvases = excalidrawWrapper.querySelectorAll('canvas');
+    if (excalidrawWrapper && frame && containerRect) {
+      const canvases = excalidrawCanvasesRef.current;
 
       canvases.forEach((srcCanvas) => {
         if (srcCanvas.width > 0 && srcCanvas.height > 0) {
-          // Calculate source rectangle (what part of Excalidraw canvas to capture)
-          // This maps the recording frame position to the source canvas
-          const container = document.querySelector('.excalidraw-container');
-          if (!container) return;
-
-          const containerRect = container.getBoundingClientRect();
-
           // Scale factors between source canvas and container
           const scaleX = srcCanvas.width / containerRect.width;
           const scaleY = srcCanvas.height / containerRect.height;
@@ -353,6 +566,79 @@ function App() {
           ctx.drawImage(srcCanvas, srcX, srcY, srcW, srcH, contentX, contentY, contentW, contentH);
         }
       });
+    }
+
+    // Excalidraw text editing happens in a DOM textarea overlay, not in canvas.
+    // Draw it manually so typing-in-progress is captured in recordings.
+    if (frame && containerRect) {
+      const activeTextEditor = document.querySelector('.excalidraw textarea.excalidraw-wysiwyg') as HTMLTextAreaElement | null;
+
+      if (activeTextEditor && activeTextEditor.value) {
+        const editorRect = activeTextEditor.getBoundingClientRect();
+        if (editorRect.width > 0 && editorRect.height > 0) {
+          const scaleX = contentW / frame.width;
+          const scaleY = contentH / frame.height;
+          const textScale = Math.min(scaleX, scaleY);
+
+          const editorX = contentX + (editorRect.left - containerRect.left - frame.x) * scaleX;
+          const editorY = contentY + (editorRect.top - containerRect.top - frame.y) * scaleY;
+          const editorW = editorRect.width * scaleX;
+          const editorH = editorRect.height * scaleY;
+
+          const styles = window.getComputedStyle(activeTextEditor);
+          const fontSize = (parseFloat(styles.fontSize) || 20) * textScale;
+          const rawLineHeight = parseFloat(styles.lineHeight);
+          const lineHeight = (Number.isFinite(rawLineHeight) ? rawLineHeight : parseFloat(styles.fontSize) * 1.35) * textScale;
+          const padLeft = (parseFloat(styles.paddingLeft) || 0) * scaleX;
+          const padRight = (parseFloat(styles.paddingRight) || 0) * scaleX;
+          const padTop = (parseFloat(styles.paddingTop) || 0) * scaleY;
+          const maxLineWidth = Math.max(8, editorW - padLeft - padRight);
+          const textColor = styles.color || '#1c1917';
+          const fontStyle = styles.fontStyle || 'normal';
+          const fontWeight = styles.fontWeight || '400';
+          const fontFamily = styles.fontFamily || 'sans-serif';
+
+          ctx.save();
+          ctx.fillStyle = textColor;
+          ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
+          ctx.textBaseline = 'top';
+
+          const paragraphs = activeTextEditor.value.replace(/\r\n/g, '\n').split('\n');
+          let drawY = editorY + padTop;
+          const maxY = editorY + editorH;
+          const drawX = editorX + padLeft;
+
+          for (const paragraph of paragraphs) {
+            if (drawY > maxY) break;
+
+            if (!paragraph) {
+              drawY += lineHeight;
+              continue;
+            }
+
+            let line = '';
+            for (const char of paragraph) {
+              const testLine = line + char;
+              if (line && ctx.measureText(testLine).width > maxLineWidth) {
+                ctx.fillText(line, drawX, drawY);
+                drawY += lineHeight;
+                line = char;
+              } else {
+                line = testLine;
+              }
+
+              if (drawY > maxY) break;
+            }
+
+            if (line && drawY <= maxY) {
+              ctx.fillText(line, drawX, drawY);
+              drawY += lineHeight;
+            }
+          }
+
+          ctx.restore();
+        }
+      }
     }
 
     ctx.restore(); // Remove clipping
@@ -406,16 +692,22 @@ function App() {
     // Draw cursor effect if enabled - minimalist transparent circle
     if (currentSettings.showCursor && frame) {
       const mousePos = mousePositionRef.current;
+      const velocity = pointerVelocityRef.current;
+      const leadMs = 18;
+      const predictedMouseX = mousePos.x + velocity.vx * leadMs;
+      const predictedMouseY = mousePos.y + velocity.vy * leadMs;
+      const localMouseX = predictedMouseX - (containerRect?.left ?? 0);
+      const localMouseY = predictedMouseY - (containerRect?.top ?? 0);
 
       // Check if mouse is within the recording frame
-      if (mousePos.x >= frame.x && mousePos.x <= frame.x + frame.width &&
-          mousePos.y >= frame.y && mousePos.y <= frame.y + frame.height) {
+      if (localMouseX >= frame.x && localMouseX <= frame.x + frame.width &&
+          localMouseY >= frame.y && localMouseY <= frame.y + frame.height) {
 
         // Convert mouse position to canvas coordinates
         const scaleX = contentW / frame.width;
         const scaleY = contentH / frame.height;
-        const cursorX = contentX + (mousePos.x - frame.x) * scaleX;
-        const cursorY = contentY + (mousePos.y - frame.y) * scaleY;
+        const cursorX = contentX + (localMouseX - frame.x) * scaleX;
+        const cursorY = contentY + (localMouseY - frame.y) * scaleY;
 
         // Simple transparent filled circle
         ctx.beginPath();
@@ -472,7 +764,11 @@ function App() {
 
     // Add frame to WebCodecs recorder if recording
     if (isRecordingRef.current && webCodecsRecorderRef.current && canvas) {
-      webCodecsRecorderRef.current.addFrame(canvas);
+      try {
+        webCodecsRecorderRef.current.addFrame(canvas);
+      } catch (error) {
+        console.error('[Recording] Failed to encode frame:', error);
+      }
     }
 
     if (isRecordingRef.current) {
@@ -512,6 +808,7 @@ function App() {
   // Actually start recording (after preview/positioning)
   const confirmRecording = useCallback(async () => {
     const { width, height } = getRecordingDimensions();
+    const targetVideoBitrate = Math.min(24_000_000, Math.max(10_000_000, Math.round((width * height * 30) / 5)));
 
     setIsPreviewing(false);
 
@@ -526,6 +823,7 @@ function App() {
     // Check if WebCodecs is supported (Chrome, Edge, Safari 16.4+)
     const useWebCodecs = isWebCodecsSupported();
     console.log('[Recording] WebCodecs supported:', useWebCodecs);
+    let webCodecsStarted = false;
 
     if (useWebCodecs) {
       // Use WebCodecs for direct MP4 recording (fast, no conversion needed)
@@ -533,25 +831,36 @@ function App() {
         width,
         height,
         frameRate: 30,
-        videoBitrate: 5_000_000,
-        audioStream: webcamStream || undefined,
+        videoBitrate: targetVideoBitrate,
+        audioStream: settings.recordAudio ? webcamStream || undefined : undefined,
       });
 
       webCodecsRecorderRef.current = recorder;
 
       try {
         await recorder.start();
+        webCodecsStarted = true;
         console.log('[Recording] WebCodecs recorder started');
       } catch (error) {
         console.error('[Recording] WebCodecs failed to start:', error);
-        alert('Failed to start recording. Your browser may not support WebCodecs.');
-        return;
+        webCodecsRecorderRef.current = null;
       }
-    } else {
-      // Fallback: WebM recording (will need conversion)
-      console.log('[Recording] Falling back to MediaRecorder (WebM)');
-      alert('Your browser does not support WebCodecs. Recording will be saved as WebM.');
     }
+
+    // Always start MediaRecorder as compatibility fallback
+    const mediaRecorderStarted = startMediaRecorder(canvas, settings.recordAudio, targetVideoBitrate);
+
+    if (!webCodecsStarted && !mediaRecorderStarted) {
+      alert('Failed to start recording. Please check browser permissions and try again.');
+      return;
+    }
+
+    if (!webCodecsStarted) {
+      console.log('[Recording] Using MediaRecorder fallback (WebM)');
+      alert('Your browser is using fallback recording. Video will be saved as WebM.');
+    }
+
+    lastRenderTimestampRef.current = 0;
 
     // Start rendering loop
     setIsRecording(true);
@@ -578,7 +887,7 @@ function App() {
       preRenderFrames();
       animationFrameRef.current = requestAnimationFrame(renderCompositeFrame);
     }, 100);
-  }, [webcamStream, renderCompositeFrame, getRecordingDimensions, showTeleprompter, settings]);
+  }, [webcamStream, renderCompositeFrame, getRecordingDimensions, showTeleprompter, settings, startMediaRecorder]);
 
   // Handle dragging the recording frame during preview
   const handleFrameDrag = useCallback((e: React.MouseEvent) => {
@@ -703,17 +1012,22 @@ function App() {
 
   // Pause/Resume recording
   const togglePause = useCallback(() => {
-    const recorder = webCodecsRecorderRef.current;
-    if (!recorder) return;
+    const webCodecsRecorder = webCodecsRecorderRef.current;
+    const mediaRecorder = mediaRecorderRef.current;
 
     if (isPaused) {
-      // Resume recording
-      recorder.resume();
+      webCodecsRecorder?.resume();
+      if (mediaRecorder?.state === 'paused') {
+        mediaRecorder.resume();
+      }
       setIsPaused(false);
     } else {
       // Pause recording - track that pause was used
       usedPauseRef.current = true;
-      recorder.pause();
+      webCodecsRecorder?.pause();
+      if (mediaRecorder?.state === 'recording') {
+        mediaRecorder.pause();
+      }
       setIsPaused(true);
     }
   }, [isPaused]);
@@ -737,40 +1051,54 @@ function App() {
     setIsRecording(false);
     setIsPaused(false);
     setRecordingFrame(null);
+    lastRenderTimestampRef.current = 0;
 
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
 
-    // Stop WebCodecs recorder and get the MP4 blob
+    setIsConverting(true);
+    setConvertingMessage('Finalizing video...');
+
     const recorder = webCodecsRecorderRef.current;
+    let mp4Blob: Blob | null = null;
+    let mp4Error: unknown = null;
+    let webCodecsHasAudio = false;
+
     if (recorder && recorder.recording) {
-      setIsConverting(true);
-      setConvertingMessage('Finalizing video...');
-
       try {
-        const mp4Blob = await recorder.stop();
-
-        // Download the MP4
-        const url = URL.createObjectURL(mp4Blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `excalicord-${Date.now()}.mp4`;
-        a.click();
-        URL.revokeObjectURL(url);
-
-        console.log('[Recording] MP4 saved, size:', (mp4Blob.size / 1024 / 1024).toFixed(2), 'MB');
+        webCodecsHasAudio = recorder.audioEnabled;
+        mp4Blob = await recorder.stop();
       } catch (error) {
-        console.error('[Recording] Failed to stop recorder:', error);
-        alert('Failed to save recording. Please try again.');
+        mp4Error = error;
+        console.error('[Recording] Failed to finalize MP4 with WebCodecs:', error);
       } finally {
-        setIsConverting(false);
-        setConvertingMessage('');
         webCodecsRecorderRef.current = null;
       }
     }
-  }, []);
+
+    const fallbackBlob = await stopMediaRecorder();
+    const prefersAudioFallback = settingsRef.current.recordAudio && !webCodecsHasAudio;
+
+    if (mp4Blob && !(prefersAudioFallback && fallbackBlob)) {
+      downloadBlob(mp4Blob, 'mp4');
+      console.log('[Recording] MP4 saved, size:', (mp4Blob.size / 1024 / 1024).toFixed(2), 'MB');
+    } else if (fallbackBlob) {
+      downloadBlob(fallbackBlob, 'webm');
+      if (mp4Error) {
+        alert('MP4 finalize failed, saved a WebM fallback instead.');
+      } else if (prefersAudioFallback) {
+        alert('Saved WebM to preserve microphone audio on this browser.');
+      }
+      console.log('[Recording] WebM fallback saved, size:', (fallbackBlob.size / 1024 / 1024).toFixed(2), 'MB');
+    } else {
+      alert('Failed to save recording. Please try again.');
+    }
+
+    setIsConverting(false);
+    setConvertingMessage('');
+  }, [downloadBlob, stopMediaRecorder]);
 
   const handleBubbleDrag = useCallback((pos: { x: number; y: number }) => {
     const frame = recordingFrameRef.current;
@@ -788,7 +1116,7 @@ function App() {
 
   // Teleprompter drag handler
   const handleTeleprompterDrag = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('textarea') || (e.target as HTMLElement).closest('button')) return;
+    if ((e.target as HTMLElement).closest('button')) return;
     e.preventDefault();
 
     const startX = e.clientX;
@@ -800,10 +1128,13 @@ function App() {
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
       const deltaY = moveEvent.clientY - startY;
+      const teleprompterRect = teleprompterRef.current?.getBoundingClientRect();
+      const width = teleprompterRect?.width || 340;
+      const height = teleprompterRect?.height || 320;
 
       setTeleprompterPosition({
-        x: Math.max(10, Math.min(window.innerWidth - 350, startPos.x + deltaX)),
-        y: Math.max(10, Math.min(window.innerHeight - 200, startPos.y + deltaY))
+        x: Math.max(10, Math.min(window.innerWidth - width - 10, startPos.x + deltaX)),
+        y: Math.max(10, Math.min(window.innerHeight - height - 10, startPos.y + deltaY))
       });
     };
 
@@ -858,6 +1189,9 @@ function App() {
           }
           if (newSettings.showCamera !== settings.showCamera) {
             trackSettingsChanged('webcam', newSettings.showCamera ? 'enabled' : 'disabled');
+          }
+          if (newSettings.recordAudio !== settings.recordAudio) {
+            trackSettingsChanged('audio', newSettings.recordAudio ? 'enabled' : 'disabled');
           }
           setSettings(newSettings);
         }}
@@ -936,17 +1270,27 @@ function App() {
         {/* Teleprompter */}
         {showTeleprompter && (
           <div
+            ref={teleprompterRef}
             className={`teleprompter ${isTeleprompterDragging ? 'dragging' : ''}`}
             style={{
               left: teleprompterPosition.x,
               top: teleprompterPosition.y,
-              cursor: isTeleprompterDragging ? 'grabbing' : 'default',
+              cursor: 'default',
             }}
-            onMouseDown={handleTeleprompterDrag}
           >
-            <div className="teleprompter-header" style={{ cursor: 'grab' }}>
+            <div
+              className="teleprompter-header"
+              style={{ cursor: isTeleprompterDragging ? 'grabbing' : 'grab' }}
+              onMouseDown={handleTeleprompterDrag}
+            >
               <span>📜 Teleprompter</span>
-              <button className="teleprompter-close" onClick={() => setShowTeleprompter(false)}>×</button>
+              <button
+                className="teleprompter-close"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => setShowTeleprompter(false)}
+              >
+                ×
+              </button>
             </div>
             <textarea
               className="teleprompter-text"
@@ -967,21 +1311,8 @@ function App() {
           />
         )}
 
-        {/* Live cursor indicator - shows during recording when cursor effect is on */}
-        {isRecording && settings.showCursor && recordingFrame &&
-         mousePosition.x >= recordingFrame.x &&
-         mousePosition.x <= recordingFrame.x + recordingFrame.width &&
-         mousePosition.y >= recordingFrame.y &&
-         mousePosition.y <= recordingFrame.y + recordingFrame.height && (
-          <div
-            className="cursor-indicator"
-            style={{
-              left: mousePosition.x,
-              top: mousePosition.y,
-              backgroundColor: settings.cursorColor + '80',
-            }}
-          />
-        )}
+        {/* Live cursor indicator (updated via refs to avoid re-render on every mouse move) */}
+        <div ref={cursorIndicatorRef} className="cursor-indicator" />
       </div>
     </div>
   );

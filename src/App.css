@@ -198,7 +198,11 @@
 .teleprompter {
   position: fixed;
   width: 340px;
-  max-height: calc(100vh - 120px);
+  height: min(420px, calc(100vh - 120px));
+  min-width: 260px;
+  min-height: 180px;
+  max-width: min(720px, calc(100vw - 20px));
+  max-height: calc(100vh - 20px);
   background: #fefcf9;
   border-radius: 16px;
   border: 1px solid rgba(0, 0, 0, 0.06);
@@ -210,6 +214,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  resize: both;
   font-family: 'DM Sans', -apple-system, sans-serif;
   user-select: none;
 }
@@ -258,7 +263,7 @@
 
 .teleprompter-text {
   flex: 1;
-  min-height: 300px;
+  min-height: 120px;
   padding: 18px;
   background: transparent;
   border: none;
@@ -285,5 +290,6 @@
   pointer-events: none;
   z-index: 9999;
   transform: translate(-50%, -50%);
+  opacity: 0;
   transition: opacity 0.1s;
 }

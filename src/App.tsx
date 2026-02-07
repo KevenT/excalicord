@@ -20,6 +20,7 @@ import WelcomeModal from './components/WelcomeModal';
 import type { RecordingSettings } from './components/SettingsPanel';
 import { initAnalytics, trackPageView, trackRecordingStarted, trackRecordingCompleted, trackRecordingCancelled, trackRecordingSourceSwitched, trackTeleprompterUsed, trackSettingsChanged } from './utils/analytics';
 import { WebCodecsRecorder, isWebCodecsSupported } from './utils/webCodecsRecorder';
+import { fixWebMDurationAndCues } from './utils/videoConverter';
 import './App.css';
 
 const RECORDING_RENDER_FPS = 30;
@@ -1664,8 +1665,13 @@ function App() {
       setCompositeSource('excalidraw');
 
       if (desktopBlob) {
-        downloadBlob(desktopBlob, 'webm');
-        console.log('[Recording] Desktop WebM saved, size:', (desktopBlob.size / 1024 / 1024).toFixed(2), 'MB');
+        setConvertingMessage('Fixing WebM metadata...');
+        const fixedDesktopBlob = await fixWebMDurationAndCues(
+          desktopBlob,
+          (message) => setConvertingMessage(message)
+        );
+        downloadBlob(fixedDesktopBlob, 'webm');
+        console.log('[Recording] Desktop WebM saved, size:', (fixedDesktopBlob.size / 1024 / 1024).toFixed(2), 'MB');
       } else {
         alert('Failed to save recording. Please try again.');
       }
@@ -1699,13 +1705,18 @@ function App() {
       downloadBlob(mp4Blob, 'mp4');
       console.log('[Recording] MP4 saved, size:', (mp4Blob.size / 1024 / 1024).toFixed(2), 'MB');
     } else if (fallbackBlob) {
-      downloadBlob(fallbackBlob, 'webm');
+      setConvertingMessage('Fixing WebM metadata...');
+      const fixedFallbackBlob = await fixWebMDurationAndCues(
+        fallbackBlob,
+        (message) => setConvertingMessage(message)
+      );
+      downloadBlob(fixedFallbackBlob, 'webm');
       if (mp4Error) {
         alert('MP4 finalize failed, saved a WebM fallback instead.');
       } else if (prefersAudioFallback) {
         alert('Saved WebM to preserve microphone audio on this browser.');
       }
-      console.log('[Recording] WebM fallback saved, size:', (fallbackBlob.size / 1024 / 1024).toFixed(2), 'MB');
+      console.log('[Recording] WebM fallback saved, size:', (fixedFallbackBlob.size / 1024 / 1024).toFixed(2), 'MB');
     } else {
       alert('Failed to save recording. Please try again.');
     }

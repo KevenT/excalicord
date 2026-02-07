@@ -134,3 +134,55 @@ export async function convertWebMToMP4(
 
   return mp4Blob;
 }
+
+/**
+ * Remux WebM to regenerate container metadata (duration/cues/index)
+ * without re-encoding video/audio.
+ *
+ * This improves compatibility with players that depend on explicit
+ * duration/index metadata (e.g. some VLC builds).
+ */
+export async function fixWebMDurationAndCues(
+  webmBlob: Blob,
+  onProgress?: (message: string) => void
+): Promise<Blob> {
+  const ff = await loadFFmpeg(onProgress);
+
+  onProgress?.('Fixing WebM metadata...');
+
+  const webmData = await fetchFile(webmBlob);
+  await ff.writeFile('input.webm', webmData);
+
+  try {
+    await ff.exec([
+      '-fflags', '+genpts',
+      '-i', 'input.webm',
+      '-map', '0',
+      '-c', 'copy',
+      '-avoid_negative_ts', 'make_zero',
+      'output-fixed.webm'
+    ]);
+
+    const fixedData = await ff.readFile('output-fixed.webm');
+    await ff.deleteFile('input.webm');
+    await ff.deleteFile('output-fixed.webm');
+
+    onProgress?.('Done!');
+    return new Blob([new Uint8Array(fixedData as Uint8Array)], { type: 'video/webm' });
+  } catch (error) {
+    // Best-effort behavior: if remux fails, return original blob.
+    console.warn('[FFmpeg] WebM metadata fix failed, falling back to original file:', error);
+    try {
+      await ff.deleteFile('input.webm');
+    } catch {
+      // ignore
+    }
+    try {
+      await ff.deleteFile('output-fixed.webm');
+    } catch {
+      // ignore
+    }
+    onProgress?.('Done!');
+    return webmBlob;
+  }
+}

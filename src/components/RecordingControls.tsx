@@ -12,10 +12,14 @@ interface RecordingControlsProps {
   isConverting: boolean;
   convertingMessage?: string;
   showCursor: boolean;
+  showSourceSwitch: boolean;
+  activeCompositeSource: 'excalidraw' | 'display';
   onStartRecording: () => void;
   onStopRecording: () => void;
   onTogglePause: () => void;
   onToggleCursor: () => void;
+  onSwitchToExcalidraw: () => void;
+  onSwitchToDisplay: () => void;
   onConfirmRecording: () => void;
   onCancelPreview: () => void;
   onOpenSettings: () => void;
@@ -30,10 +34,14 @@ function RecordingControls({
   isConverting,
   convertingMessage,
   showCursor,
+  showSourceSwitch,
+  activeCompositeSource,
   onStartRecording,
   onStopRecording,
   onTogglePause,
   onToggleCursor,
+  onSwitchToExcalidraw,
+  onSwitchToDisplay,
   onConfirmRecording,
   onCancelPreview,
   onOpenSettings,
@@ -157,6 +165,25 @@ function RecordingControls({
         </div>
       ) : isRecording ? (
         <>
+          {showSourceSwitch && (
+            <div className="source-switch-group">
+              <span className="source-switch-label">
+                Source: {activeCompositeSource === 'display' ? 'Shared' : 'Whiteboard'}
+              </span>
+              <button
+                className={`source-switch-btn ${activeCompositeSource === 'excalidraw' ? 'active' : ''}`}
+                onClick={onSwitchToExcalidraw}
+              >
+                Excalidraw
+              </button>
+              <button
+                className={`source-switch-btn ${activeCompositeSource === 'display' ? 'active' : ''}`}
+                onClick={onSwitchToDisplay}
+              >
+                Share Screen/Window/Tab
+              </button>
+            </div>
+          )}
           {/* Cursor toggle - icon button */}
           <button
             className={`icon-btn cursor-toggle-btn ${showCursor ? 'active' : ''}`}

@@ -589,6 +589,10 @@
   padding-left: 0;
 }
 
+.webcam-size-slider .toggle-label {
+  margin-bottom: 10px;
+}
+
 .webcam-size-slider .slider-header {
   font-size: 12px;
   color: #78716c;

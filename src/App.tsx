@@ -18,12 +18,67 @@ import SettingsPanel, { ASPECT_RATIOS } from './components/SettingsPanel';
 import MobileLanding from './components/MobileLanding';
 import WelcomeModal from './components/WelcomeModal';
 import type { RecordingSettings } from './components/SettingsPanel';
-import { initAnalytics, trackPageView, trackRecordingStarted, trackRecordingCompleted, trackRecordingCancelled, trackTeleprompterUsed, trackSettingsChanged } from './utils/analytics';
+import { initAnalytics, trackPageView, trackRecordingStarted, trackRecordingCompleted, trackRecordingCancelled, trackRecordingSourceSwitched, trackTeleprompterUsed, trackSettingsChanged } from './utils/analytics';
 import { WebCodecsRecorder, isWebCodecsSupported } from './utils/webCodecsRecorder';
 import './App.css';
 
 const RECORDING_RENDER_FPS = 30;
 const RECORDING_FRAME_INTERVAL_MS = 1000 / RECORDING_RENDER_FPS;
+type CompositeVisualSource = 'excalidraw' | 'display';
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const getAdaptiveVisualDefaults = (next: {
+  aspectRatio: string;
+  customWidth: number;
+  customHeight: number;
+}) => {
+  const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth;
+  const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight;
+  const base = Math.min(viewportWidth, viewportHeight);
+  const portraitLike = (
+    next.aspectRatio === '9:16' ||
+    next.aspectRatio === '3:4' ||
+    (next.aspectRatio === 'custom' && next.customHeight > next.customWidth)
+  );
+  const ratioScale = portraitLike ? 0.72 : 1;
+
+  return {
+    webcamSize: clamp(Math.round(base * 0.2 * ratioScale), 105, 220),
+    padding: clamp(Math.round(base * 0.065 * ratioScale), 16, 72),
+    cornerRadius: clamp(Math.round(base * 0.018 * ratioScale), 8, 24),
+  };
+};
+
+const createDefaultSettings = (): RecordingSettings => {
+  const adaptiveDefaults = getAdaptiveVisualDefaults({
+    aspectRatio: '16:9',
+    customWidth: 1920,
+    customHeight: 1080,
+  });
+
+  return {
+    recordingSource: 'composite',
+    aspectRatio: '16:9',
+    customWidth: 1920,
+    customHeight: 1080,
+    background: '#ffffff',
+    backgroundId: 'none',
+    backgroundType: 'solid',
+    webcamSize: adaptiveDefaults.webcamSize,
+    padding: adaptiveDefaults.padding,
+    cornerRadius: adaptiveDefaults.cornerRadius,
+    showCursor: true,
+    cursorColor: '#ef4444',
+    showTitle: false,
+    titleText: '',
+    titlePosition: 'bottom-left',
+    showCamera: true,
+    cameraMirror: true,
+    recordAudio: true,
+    recordSystemAudio: true,
+  };
+};
 
 // Initialize analytics once when module loads
 initAnalytics();
@@ -38,28 +93,6 @@ const isMobileDevice = () => {
 
   // Show mobile landing if screen is small OR it's a mobile browser
   return isSmallScreen || mobileUA;
-};
-
-// Default settings
-const DEFAULT_SETTINGS: RecordingSettings = {
-  recordingSource: 'composite',
-  aspectRatio: '16:9',
-  customWidth: 1920,
-  customHeight: 1080,
-  background: '#ffffff',
-  backgroundId: 'none',
-  backgroundType: 'solid',
-  webcamSize: 180,
-  padding: 60,
-  cornerRadius: 16,
-  showCursor: true,
-  cursorColor: '#ef4444',
-  showTitle: false,
-  titleText: '',
-  titlePosition: 'bottom-left',
-  showCamera: true,
-  recordAudio: true,
-  recordSystemAudio: true,
 };
 
 function App() {
@@ -85,8 +118,9 @@ function App() {
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
   const [bubblePosition, setBubblePosition] = useState({ x: 20, y: 100 });
   const [showSettings, setShowSettings] = useState(false);
-  const [settings, setSettings] = useState<RecordingSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<RecordingSettings>(() => createDefaultSettings());
   const [recordingFrame, setRecordingFrame] = useState<{x: number, y: number, width: number, height: number} | null>(null);
+  const [activeCompositeSource, setActiveCompositeSource] = useState<CompositeVisualSource>('excalidraw');
   const [showTeleprompter, setShowTeleprompter] = useState(false);
   const [teleprompterText, setTeleprompterText] = useState('');
   const [teleprompterPosition, setTeleprompterPosition] = useState({ x: window.innerWidth - 360, y: 80 });
@@ -107,10 +141,23 @@ function App() {
   const desktopMicStreamRef = useRef<MediaStream | null>(null);
   const desktopAudioContextRef = useRef<AudioContext | null>(null);
   const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
+  const displayCaptureStreamRef = useRef<MediaStream | null>(null);
+  const displayCaptureVideoRef = useRef<HTMLVideoElement | null>(null);
+  const displayCaptureSystemAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const sourceSwitchCountRef = useRef(0);
+  const usedDisplaySourceRef = useRef(false);
+  const compositeAudioContextRef = useRef<AudioContext | null>(null);
+  const compositeAudioDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const compositeMicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const compositeSystemSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const compositeMicGainRef = useRef<GainNode | null>(null);
+  const compositeSystemGainRef = useRef<GainNode | null>(null);
+  const compositeMixedAudioStreamRef = useRef<MediaStream | null>(null);
 
   // Refs for animation loop
   const isRecordingRef = useRef(false);
   const activeRecordingSourceRef = useRef<'composite' | 'desktop'>('composite');
+  const activeCompositeSourceRef = useRef<CompositeVisualSource>('excalidraw');
   const bubblePositionRef = useRef({ x: 20, y: 100 });
   const settingsRef = useRef(settings);
   const recordingFrameRef = useRef<{x: number, y: number, width: number, height: number} | null>(null);
@@ -132,6 +179,7 @@ function App() {
   useEffect(() => { bubblePositionRef.current = bubblePosition; }, [bubblePosition]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { recordingFrameRef.current = recordingFrame; }, [recordingFrame]);
+  useEffect(() => { activeCompositeSourceRef.current = activeCompositeSource; }, [activeCompositeSource]);
 
   const updateCursorIndicator = useCallback((x: number, y: number) => {
     const indicator = cursorIndicatorRef.current;
@@ -341,6 +389,144 @@ function App() {
     await closeDesktopAudioContext();
   }, [closeDesktopAudioContext]);
 
+  const closeCompositeAudioContext = useCallback(async () => {
+    const audioContext = compositeAudioContextRef.current;
+    compositeAudioContextRef.current = null;
+
+    if (!audioContext || audioContext.state === 'closed') {
+      return;
+    }
+
+    try {
+      await audioContext.close();
+    } catch (error) {
+      console.warn('[Composite] Failed to close AudioContext:', error);
+    }
+  }, []);
+
+  const detachCompositeSystemAudio = useCallback(() => {
+    compositeSystemSourceRef.current?.disconnect();
+    compositeSystemGainRef.current?.disconnect();
+    compositeSystemSourceRef.current = null;
+    compositeSystemGainRef.current = null;
+    displayCaptureSystemAudioTrackRef.current = null;
+  }, []);
+
+  const cleanupCompositeAudioPipeline = useCallback(async () => {
+    detachCompositeSystemAudio();
+    compositeMicSourceRef.current?.disconnect();
+    compositeMicGainRef.current?.disconnect();
+    compositeMicSourceRef.current = null;
+    compositeMicGainRef.current = null;
+    compositeAudioDestinationRef.current = null;
+    compositeMixedAudioStreamRef.current?.getTracks().forEach((track) => track.stop());
+    compositeMixedAudioStreamRef.current = null;
+    await closeCompositeAudioContext();
+  }, [closeCompositeAudioContext, detachCompositeSystemAudio]);
+
+  const createCompositeAudioPipeline = useCallback(async (
+    includeMic: boolean,
+    includeSystemAudio: boolean
+  ): Promise<MediaStream | null> => {
+    if ((!includeMic && !includeSystemAudio) || typeof AudioContext === 'undefined') {
+      return null;
+    }
+
+    await cleanupCompositeAudioPipeline();
+
+    try {
+      const audioContext = new AudioContext();
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+
+      const destination = audioContext.createMediaStreamDestination();
+      compositeAudioContextRef.current = audioContext;
+      compositeAudioDestinationRef.current = destination;
+      compositeMixedAudioStreamRef.current = destination.stream;
+
+      if (includeMic) {
+        const micTrack = webcamStream?.getAudioTracks().find((track) => track.readyState === 'live');
+        if (micTrack) {
+          const micSource = audioContext.createMediaStreamSource(new MediaStream([micTrack]));
+          const micGain = audioContext.createGain();
+          micGain.gain.value = 1;
+          micSource.connect(micGain);
+          micGain.connect(destination);
+          compositeMicSourceRef.current = micSource;
+          compositeMicGainRef.current = micGain;
+        } else {
+          console.warn('[Composite] Microphone requested but unavailable.');
+        }
+      }
+
+      const mixedTrack = destination.stream.getAudioTracks()[0] ?? null;
+      if (!mixedTrack) {
+        await cleanupCompositeAudioPipeline();
+        return null;
+      }
+
+      return destination.stream;
+    } catch (error) {
+      console.warn('[Composite] Failed to initialize audio mix pipeline:', error);
+      await cleanupCompositeAudioPipeline();
+      return null;
+    }
+  }, [cleanupCompositeAudioPipeline, webcamStream]);
+
+  const attachCompositeSystemAudio = useCallback((systemTrack: MediaStreamTrack | null): boolean => {
+    detachCompositeSystemAudio();
+
+    if (!systemTrack || !settingsRef.current.recordSystemAudio) {
+      return false;
+    }
+
+    const audioContext = compositeAudioContextRef.current;
+    const destination = compositeAudioDestinationRef.current;
+    if (!audioContext || !destination) {
+      return false;
+    }
+
+    try {
+      const systemSource = audioContext.createMediaStreamSource(new MediaStream([systemTrack]));
+      const systemGain = audioContext.createGain();
+      systemGain.gain.value = 1;
+      systemSource.connect(systemGain);
+      systemGain.connect(destination);
+      compositeSystemSourceRef.current = systemSource;
+      compositeSystemGainRef.current = systemGain;
+      displayCaptureSystemAudioTrackRef.current = systemTrack;
+      return true;
+    } catch (error) {
+      console.warn('[Composite] Failed to attach system audio track:', error);
+      return false;
+    }
+  }, [detachCompositeSystemAudio]);
+
+  const cleanupCompositeDisplayCapture = useCallback((stopTracks: boolean) => {
+    const stream = displayCaptureStreamRef.current;
+    const videoEl = displayCaptureVideoRef.current;
+
+    if (stream && stopTracks) {
+      stream.getTracks().forEach((track) => {
+        track.onended = null;
+        track.stop();
+      });
+    } else if (stream) {
+      stream.getVideoTracks().forEach((track) => {
+        track.onended = null;
+      });
+    }
+
+    if (videoEl) {
+      videoEl.pause();
+      videoEl.srcObject = null;
+    }
+
+    displayCaptureStreamRef.current = null;
+    detachCompositeSystemAudio();
+  }, [detachCompositeSystemAudio]);
+
   const startMediaRecorderFromStream = useCallback((
     stream: MediaStream,
     videoBitrate: number
@@ -383,7 +569,7 @@ function App() {
 
   const startMediaRecorder = useCallback((
     canvas: HTMLCanvasElement,
-    includeAudio: boolean,
+    audioStream: MediaStream | null,
     videoBitrate: number
   ) => {
     if (typeof MediaRecorder === 'undefined') {
@@ -391,16 +577,14 @@ function App() {
     }
 
     const stream = canvas.captureStream(30);
-    const audioTrack = includeAudio
-      ? webcamStream?.getAudioTracks().find((track) => track.readyState === 'live')
-      : undefined;
+    const audioTrack = audioStream?.getAudioTracks().find((track) => track.readyState === 'live');
 
     if (audioTrack) {
       stream.addTrack(audioTrack.clone());
     }
 
     return startMediaRecorderFromStream(stream, videoBitrate);
-  }, [startMediaRecorderFromStream, webcamStream]);
+  }, [startMediaRecorderFromStream]);
 
   const mixDesktopAudioTracks = useCallback(async (
     systemAudioTrack: MediaStreamTrack,
@@ -496,8 +680,10 @@ function App() {
   useEffect(() => {
     return () => {
       void cleanupDesktopCapture();
+      cleanupCompositeDisplayCapture(true);
+      void cleanupCompositeAudioPipeline();
     };
-  }, [cleanupDesktopCapture]);
+  }, [cleanupCompositeAudioPipeline, cleanupCompositeDisplayCapture, cleanupDesktopCapture]);
 
   // Parse gradient for canvas drawing
   const parseGradient = (ctx: CanvasRenderingContext2D, gradientStr: string, width: number, height: number) => {
@@ -649,8 +835,35 @@ function App() {
     roundedRectPath(contentX, contentY, contentW, contentH, cornerRadius);
     ctx.clip();
 
-    // Draw Excalidraw content - capture from the visible frame area
-    if (excalidrawWrapper && frame && containerRect) {
+    const activeSource = activeCompositeSourceRef.current;
+    const displayVideo = displayCaptureVideoRef.current;
+    const canDrawDisplaySource = Boolean(
+      activeSource === 'display' &&
+      displayVideo &&
+      displayVideo.readyState >= 2 &&
+      displayVideo.videoWidth > 0 &&
+      displayVideo.videoHeight > 0
+    );
+
+    // Draw selected visual source into the recording surface
+    if (canDrawDisplaySource && displayVideo) {
+      const srcAspect = displayVideo.videoWidth / displayVideo.videoHeight;
+      const dstAspect = contentW / contentH;
+      let srcX = 0;
+      let srcY = 0;
+      let srcW = displayVideo.videoWidth;
+      let srcH = displayVideo.videoHeight;
+
+      if (srcAspect > dstAspect) {
+        srcW = displayVideo.videoHeight * dstAspect;
+        srcX = (displayVideo.videoWidth - srcW) / 2;
+      } else if (srcAspect < dstAspect) {
+        srcH = displayVideo.videoWidth / dstAspect;
+        srcY = (displayVideo.videoHeight - srcH) / 2;
+      }
+
+      ctx.drawImage(displayVideo, srcX, srcY, srcW, srcH, contentX, contentY, contentW, contentH);
+    } else if (excalidrawWrapper && frame && containerRect) {
       const canvases = excalidrawCanvasesRef.current;
 
       canvases.forEach((srcCanvas) => {
@@ -673,7 +886,7 @@ function App() {
 
     // Excalidraw text editing happens in a DOM textarea overlay, not in canvas.
     // Draw it manually so typing-in-progress is captured in recordings.
-    if (frame && containerRect) {
+    if (!canDrawDisplaySource && frame && containerRect) {
       const activeTextEditor = document.querySelector('.excalidraw textarea.excalidraw-wysiwyg') as HTMLTextAreaElement | null;
 
       if (activeTextEditor && activeTextEditor.value) {
@@ -785,9 +998,13 @@ function App() {
       ctx.closePath();
       ctx.clip();
 
-      ctx.translate(x + scaledSize, y);
-      ctx.scale(-1, 1);
-      ctx.drawImage(videoEl, srcX, srcY, srcW, srcH, 0, 0, scaledSize, scaledSize);
+      if (currentSettings.cameraMirror) {
+        ctx.translate(x + scaledSize, y);
+        ctx.scale(-1, 1);
+        ctx.drawImage(videoEl, srcX, srcY, srcW, srcH, 0, 0, scaledSize, scaledSize);
+      } else {
+        ctx.drawImage(videoEl, srcX, srcY, srcW, srcH, x, y, scaledSize, scaledSize);
+      }
       ctx.restore();
 
     }
@@ -887,6 +1104,133 @@ function App() {
     const constrainedY = Math.max(frame.y, Math.min(currentPos.y, frame.y + frame.height - size));
     setBubblePosition({ x: constrainedX, y: constrainedY });
   }, []);
+
+  const setCompositeSource = useCallback((source: CompositeVisualSource) => {
+    activeCompositeSourceRef.current = source;
+    setActiveCompositeSource(source);
+  }, []);
+
+  const switchCompositeToExcalidraw = useCallback((trigger: 'control_button' | 'auto_fallback') => {
+    const from = activeCompositeSourceRef.current;
+    if (from === 'excalidraw') {
+      return;
+    }
+
+    setCompositeSource('excalidraw');
+    cleanupCompositeDisplayCapture(true);
+    sourceSwitchCountRef.current += 1;
+    trackRecordingSourceSwitched({
+      from,
+      to: 'excalidraw',
+      trigger,
+      success: true,
+    });
+  }, [cleanupCompositeDisplayCapture, setCompositeSource]);
+
+  const attachCompositeDisplaySource = useCallback(async (trigger: 'control_button' | 'auto_fallback') => {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      alert('Screen sharing is not supported in this browser.');
+      trackRecordingSourceSwitched({
+        from: activeCompositeSourceRef.current,
+        to: 'display',
+        trigger,
+        success: false,
+      });
+      return false;
+    }
+
+    let displayStream: MediaStream;
+    try {
+      displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: settingsRef.current.recordSystemAudio,
+      });
+    } catch (error) {
+      const name = error instanceof DOMException ? error.name : '';
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        alert('Failed to start screen sharing. Please try again.');
+      }
+      trackRecordingSourceSwitched({
+        from: activeCompositeSourceRef.current,
+        to: 'display',
+        trigger,
+        success: false,
+      });
+      return false;
+    }
+
+    const displayVideoTrack = displayStream.getVideoTracks().find((track) => track.readyState === 'live');
+    if (!displayVideoTrack) {
+      displayStream.getTracks().forEach((track) => track.stop());
+      alert('No shared video track detected. Please choose a screen, window, or tab.');
+      trackRecordingSourceSwitched({
+        from: activeCompositeSourceRef.current,
+        to: 'display',
+        trigger,
+        success: false,
+      });
+      return false;
+    }
+
+    cleanupCompositeDisplayCapture(true);
+    displayCaptureStreamRef.current = displayStream;
+
+    let displayVideo = displayCaptureVideoRef.current;
+    if (!displayVideo) {
+      displayVideo = document.createElement('video');
+      displayVideo.muted = true;
+      displayVideo.playsInline = true;
+      displayVideo.autoplay = true;
+      displayCaptureVideoRef.current = displayVideo;
+    }
+
+    displayVideo.srcObject = displayStream;
+    try {
+      await displayVideo.play();
+    } catch {
+      // Playback may require user interaction in some browsers; rendering checks readyState.
+    }
+
+    const systemAudioTrack = settingsRef.current.recordSystemAudio
+      ? displayStream.getAudioTracks().find((track) => track.readyState === 'live') ?? null
+      : null;
+    if (settingsRef.current.recordSystemAudio && systemAudioTrack) {
+      const attached = attachCompositeSystemAudio(systemAudioTrack);
+      if (!attached && settingsRef.current.recordAudio) {
+        alert('Could not mix system audio. Recording microphone audio only.');
+      }
+    } else {
+      detachCompositeSystemAudio();
+      if (settingsRef.current.recordSystemAudio) {
+        alert('No system audio track was provided by this share target.');
+      }
+    }
+
+    displayVideoTrack.onended = () => {
+      if (!isRecordingRef.current || activeRecordingSourceRef.current !== 'composite') {
+        cleanupCompositeDisplayCapture(true);
+        return;
+      }
+      switchCompositeToExcalidraw('auto_fallback');
+      alert('Screen sharing stopped. Switched back to Excalidraw recording.');
+    };
+
+    const from = activeCompositeSourceRef.current;
+    setCompositeSource('display');
+    usedDisplaySourceRef.current = true;
+    if (from !== 'display') {
+      sourceSwitchCountRef.current += 1;
+    }
+
+    trackRecordingSourceSwitched({
+      from,
+      to: 'display',
+      trigger,
+      success: true,
+    });
+
+    return true;
+  }, [attachCompositeSystemAudio, cleanupCompositeDisplayCapture, detachCompositeSystemAudio, setCompositeSource, switchCompositeToExcalidraw]);
 
   const startDesktopCaptureRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -1035,6 +1379,10 @@ function App() {
 
     setIsPreviewing(false);
     activeRecordingSourceRef.current = 'composite';
+    setCompositeSource('excalidraw');
+    sourceSwitchCountRef.current = 0;
+    usedDisplaySourceRef.current = false;
+    cleanupCompositeDisplayCapture(true);
 
     let canvas = compositeCanvasRef.current;
     if (!canvas) {
@@ -1043,6 +1391,17 @@ function App() {
     }
     canvas.width = width;
     canvas.height = height;
+
+    let compositeAudioStream = await createCompositeAudioPipeline(
+      settings.recordAudio,
+      settings.recordSystemAudio
+    );
+    if (!compositeAudioStream && settings.recordAudio) {
+      const micTrack = webcamStream?.getAudioTracks().find((track) => track.readyState === 'live');
+      if (micTrack) {
+        compositeAudioStream = new MediaStream([micTrack.clone()]);
+      }
+    }
 
     // Check if WebCodecs is supported (Chrome, Edge, Safari 16.4+)
     const useWebCodecs = isWebCodecsSupported();
@@ -1056,7 +1415,7 @@ function App() {
         height,
         frameRate: 30,
         videoBitrate: targetVideoBitrate,
-        audioStream: settings.recordAudio ? webcamStream || undefined : undefined,
+        audioStream: compositeAudioStream || undefined,
       });
 
       webCodecsRecorderRef.current = recorder;
@@ -1072,7 +1431,7 @@ function App() {
     }
 
     // Always start MediaRecorder as compatibility fallback
-    const mediaRecorderStarted = startMediaRecorder(canvas, settings.recordAudio, targetVideoBitrate);
+    const mediaRecorderStarted = startMediaRecorder(canvas, compositeAudioStream, targetVideoBitrate);
 
     if (!webCodecsStarted && !mediaRecorderStarted) {
       alert('Failed to start recording. Please check browser permissions and try again.');
@@ -1099,6 +1458,7 @@ function App() {
       webcamEnabled: settings.showCamera,
       webcamPosition: 'bottom-right',
       recordingSource: 'composite',
+      compositeInitialSource: 'excalidraw',
     });
 
     // Render a few frames before starting
@@ -1112,7 +1472,7 @@ function App() {
       preRenderFrames();
       animationFrameRef.current = requestAnimationFrame(renderCompositeFrame);
     }, 100);
-  }, [webcamStream, renderCompositeFrame, getRecordingDimensions, showTeleprompter, settings, startMediaRecorder]);
+  }, [cleanupCompositeDisplayCapture, createCompositeAudioPipeline, getRecordingDimensions, renderCompositeFrame, setCompositeSource, settings, showTeleprompter, startMediaRecorder, webcamStream]);
 
   // Handle dragging the recording frame during preview
   const handleFrameDrag = useCallback((e: React.MouseEvent) => {
@@ -1277,6 +1637,8 @@ function App() {
         usedTeleprompter: usedTeleprompterRef.current,
         usedPause: usedPauseRef.current,
         recordingSource,
+        usedDisplaySource: recordingSource === 'composite' ? usedDisplaySourceRef.current : undefined,
+        sourceSwitchCount: recordingSource === 'composite' ? sourceSwitchCountRef.current : undefined,
       });
       recordingStartTimeRef.current = null;
     }
@@ -1297,6 +1659,9 @@ function App() {
     if (recordingSource === 'desktop') {
       const desktopBlob = await stopMediaRecorder();
       await cleanupDesktopCapture();
+      cleanupCompositeDisplayCapture(true);
+      await cleanupCompositeAudioPipeline();
+      setCompositeSource('excalidraw');
 
       if (desktopBlob) {
         downloadBlob(desktopBlob, 'webm');
@@ -1347,7 +1712,10 @@ function App() {
 
     setIsConverting(false);
     setConvertingMessage('');
-  }, [cleanupDesktopCapture, downloadBlob, stopMediaRecorder]);
+    cleanupCompositeDisplayCapture(true);
+    await cleanupCompositeAudioPipeline();
+    setCompositeSource('excalidraw');
+  }, [cleanupCompositeAudioPipeline, cleanupCompositeDisplayCapture, cleanupDesktopCapture, downloadBlob, setCompositeSource, stopMediaRecorder]);
 
   useEffect(() => {
     stopRecordingRef.current = stopRecording;
@@ -1411,10 +1779,16 @@ function App() {
         isConverting={isConverting}
         convertingMessage={convertingMessage}
         showCursor={settings.showCursor}
+        showSourceSwitch={isRecording && settings.recordingSource === 'composite'}
+        activeCompositeSource={activeCompositeSource}
         onStartRecording={startRecording}
         onStopRecording={stopRecording}
         onTogglePause={togglePause}
         onToggleCursor={() => setSettings(prev => ({ ...prev, showCursor: !prev.showCursor }))}
+        onSwitchToExcalidraw={() => switchCompositeToExcalidraw('control_button')}
+        onSwitchToDisplay={() => {
+          void attachCompositeDisplaySource('control_button');
+        }}
         onConfirmRecording={confirmRecording}
         onCancelPreview={cancelPreview}
         onOpenSettings={() => setShowSettings(true)}
@@ -1433,6 +1807,16 @@ function App() {
         isOpen={showSettings}
         settings={settings}
         onSettingsChange={(newSettings) => {
+          let finalSettings = newSettings;
+
+          if (newSettings.aspectRatio !== settings.aspectRatio) {
+            const adaptiveDefaults = getAdaptiveVisualDefaults(newSettings);
+            finalSettings = {
+              ...newSettings,
+              ...adaptiveDefaults,
+            };
+          }
+
           // Track significant setting changes
           if (newSettings.aspectRatio !== settings.aspectRatio) {
             trackSettingsChanged('aspect_ratio', newSettings.aspectRatio);
@@ -1452,7 +1836,10 @@ function App() {
           if (newSettings.recordSystemAudio !== settings.recordSystemAudio) {
             trackSettingsChanged('system_audio', newSettings.recordSystemAudio ? 'enabled' : 'disabled');
           }
-          setSettings(newSettings);
+          if (newSettings.cameraMirror !== settings.cameraMirror) {
+            trackSettingsChanged('camera_mirror', newSettings.cameraMirror ? 'enabled' : 'disabled');
+          }
+          setSettings(finalSettings);
         }}
         onClose={() => setShowSettings(false)}
       />
@@ -1565,6 +1952,7 @@ function App() {
             stream={webcamStream}
             position={bubblePosition}
             size={settings.webcamSize}
+            mirrored={settings.cameraMirror}
             onDrag={handleBubbleDrag}
             videoRef={webcamVideoRef}
           />

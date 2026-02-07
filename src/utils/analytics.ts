@@ -52,6 +52,7 @@ export function trackRecordingStarted(settings: {
   webcamEnabled: boolean;
   webcamPosition: string;
   recordingSource: 'composite' | 'desktop';
+  compositeInitialSource?: 'excalidraw' | 'display';
 }) {
   posthog.capture('recording_started', settings);
 }
@@ -65,11 +66,23 @@ export function trackRecordingCompleted(data: {
   usedTeleprompter: boolean;
   usedPause: boolean;
   recordingSource: 'composite' | 'desktop';
+  usedDisplaySource?: boolean;
+  sourceSwitchCount?: number;
 }) {
   posthog.capture('recording_completed', {
     ...data,
     duration_minutes: Math.round(data.durationSeconds / 60 * 10) / 10
   });
+}
+
+// Track source switches during composite recording
+export function trackRecordingSourceSwitched(data: {
+  from: 'excalidraw' | 'display';
+  to: 'excalidraw' | 'display';
+  trigger: 'control_button' | 'auto_fallback';
+  success: boolean;
+}) {
+  posthog.capture('recording_source_switched', data);
 }
 
 // Track when recording is cancelled

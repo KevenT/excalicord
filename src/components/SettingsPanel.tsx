@@ -216,6 +216,7 @@ export interface RecordingSettings {
   titlePosition: 'bottom-left' | 'bottom-right';
   // Camera settings
   showCamera: boolean;
+  cameraMirror: boolean;
   // Audio settings
   recordAudio: boolean;
   recordSystemAudio: boolean;
@@ -329,6 +330,11 @@ function SettingsPanel({ isOpen, settings, onSettingsChange, onClose }: Settings
             <p className="desktop-mode-note">
               Desktop mode records the shared screen directly. Background, corner radius, cursor effect,
               title overlay, and camera bubble are ignored. You will choose the screen/window/tab each time.
+            </p>
+          )}
+          {settings.recordingSource === 'composite' && (
+            <p className="desktop-mode-note">
+              Composite mode can switch source while recording: Excalidraw or a shared screen/window/tab.
             </p>
           )}
         </div>
@@ -446,6 +452,15 @@ function SettingsPanel({ isOpen, settings, onSettingsChange, onClose }: Settings
 
           {settings.showCamera && (
             <div className="webcam-size-slider">
+              <label className="toggle-label">
+                <input
+                  type="checkbox"
+                  checked={settings.cameraMirror}
+                  onChange={e => onSettingsChange({ ...settings, cameraMirror: e.target.checked })}
+                />
+                <span className="toggle-switch"></span>
+                Mirror camera left/right
+              </label>
               <div className="slider-header">Size: {settings.webcamSize}px</div>
               <input
                 type="range"
@@ -482,7 +497,7 @@ function SettingsPanel({ isOpen, settings, onSettingsChange, onClose }: Settings
               onChange={e => onSettingsChange({ ...settings, recordSystemAudio: e.target.checked })}
             />
             <span className="toggle-switch"></span>
-            Record system audio (desktop mode)
+            Record system audio when screen sharing (desktop/composite switch)
           </label>
         </div>
 

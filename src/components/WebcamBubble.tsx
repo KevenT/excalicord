@@ -21,11 +21,12 @@ interface WebcamBubbleProps {
   stream: MediaStream;           // The video stream from your camera
   position: { x: number; y: number };  // Current position {x, y}
   size: number;                  // Diameter of the bubble in pixels
+  mirrored: boolean;             // Whether the preview should be mirrored horizontally
   onDrag: (position: { x: number; y: number }) => void;  // Callback when dragged
   videoRef: RefObject<HTMLVideoElement | null>;  // Reference to pass up to parent
 }
 
-function WebcamBubble({ stream, position, size, onDrag, videoRef }: WebcamBubbleProps) {
+function WebcamBubble({ stream, position, size, mirrored, onDrag, videoRef }: WebcamBubbleProps) {
   // Local ref for the video element (we'll sync this with the parent's ref)
   const localVideoRef = useRef<HTMLVideoElement>(null);
 
@@ -120,7 +121,7 @@ function WebcamBubble({ stream, position, size, onDrag, videoRef }: WebcamBubble
       {/* The video element that shows your webcam feed */}
       <video
         ref={localVideoRef}
-        className="webcam-video"
+        className={`webcam-video ${mirrored ? 'mirrored' : ''}`}
         autoPlay        // Start playing as soon as stream is connected
         playsInline     // Required for iOS to work properly
         muted           // Muted to prevent audio feedback loop

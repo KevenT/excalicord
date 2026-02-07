@@ -128,6 +128,48 @@
   background: #fef2f2;
 }
 
+/* Source switcher */
+.source-switch-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 4px;
+  margin-right: 2px;
+  border-right: 1px solid #e7e5e4;
+}
+
+.source-switch-label {
+  color: #78716c;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.source-switch-btn {
+  border: 1px solid #d6d3d1;
+  background: #ffffff;
+  color: #57534e;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.source-switch-btn:hover {
+  border-color: #a8a29e;
+  background: #fafaf9;
+}
+
+.source-switch-btn.active {
+  border-color: #292524;
+  background: #292524;
+  color: #ffffff;
+}
+
 /* ========== MAIN BUTTONS ========== */
 .control-button {
   display: flex;

@@ -214,7 +214,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  resize: both;
+  resize: none;
   font-family: 'DM Sans', -apple-system, sans-serif;
   user-select: none;
 }
@@ -224,6 +224,13 @@
     0 1px 2px rgba(0, 0, 0, 0.04),
     0 12px 32px rgba(0, 0, 0, 0.15),
     0 24px 64px rgba(0, 0, 0, 0.12);
+}
+
+.teleprompter.resizing {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 12px 30px rgba(0, 0, 0, 0.14),
+    0 0 0 1px rgba(68, 64, 60, 0.25);
 }
 
 .teleprompter-header {
@@ -261,10 +268,124 @@
   background: #e7e5e4;
 }
 
+.teleprompter-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(245, 245, 244, 0.82);
+  border-bottom: 1px solid #e7e5e4;
+}
+
+.teleprompter-play-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: #e7e5e4;
+  color: #78716c;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.teleprompter-play-btn:hover {
+  background: #d6d3d1;
+  color: #44403c;
+}
+
+.teleprompter-play-btn.active {
+  background: #292524;
+  color: #fefcf9;
+}
+
+.teleprompter-slider-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.teleprompter-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.teleprompter-slider-row span {
+  width: 60px;
+  color: #a8a29e;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.teleprompter-slider-row input[type='range'] {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  appearance: none;
+  background: #d6d3d1;
+  cursor: pointer;
+}
+
+.teleprompter-slider-row input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #78716c;
+}
+
+.teleprompter-text-area {
+  position: relative;
+  flex: 1;
+  min-height: 120px;
+}
+
+.teleprompter-scrollbar {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 5px;
+  border-radius: 999px;
+  background: rgba(120, 113, 108, var(--tp-scrollbar-track-alpha, 0.14));
+  z-index: 2;
+}
+
+.teleprompter-scroll-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  /* min-height: 34px; */
+  min-height: 20px;
+  max-height: 20px;
+  border: none;
+  border-radius: 999px;
+  /* background: rgba(120, 113, 108, var(--tp-scrollbar-thumb-alpha, 0.5)); */
+  /* background: rgba(120, 113, 108, var(--tp-scrollbar-thumb-alpha, 0.5)); */
+  color: var(--tp-body-text-color, rgba(28, 25, 23, 0.8));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: ns-resize;
+  padding: 0 0px;
+  user-select: none;
+}
+
 .teleprompter-text {
   flex: 1;
   min-height: 120px;
-  padding: 18px;
+  width: 100%;
+  height: 100%;
+  padding: 18px 12px 10px 15px;
   background: transparent;
   border: none;
   color: #1c1917;
@@ -275,10 +396,36 @@
   outline: none;
   user-select: text;
   cursor: text;
+  scrollbar-width: none;
 }
 
 .teleprompter-text::placeholder {
   color: #a8a29e;
+}
+
+.teleprompter-text::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.teleprompter-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 0 0 16px 0;
+  background:
+    linear-gradient(135deg, transparent 0 42%, rgba(68, 64, 60, 0.36) 42% 48%, transparent 48% 58%, rgba(68, 64, 60, 0.5) 58% 64%, transparent 64% 76%, rgba(68, 64, 60, 0.65) 76% 82%, transparent 82% 100%);
+  cursor: nwse-resize;
+  opacity: 0.78;
+  z-index: 4;
+  padding: 0;
+}
+
+.teleprompter-resize-handle:hover {
+  opacity: 1;
 }
 
 /* ========== LIVE CURSOR INDICATOR ========== */

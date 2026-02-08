@@ -9,7 +9,7 @@
  * - Recording area overlay
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, type CSSProperties } from 'react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import WebcamBubble from './components/WebcamBubble';
@@ -28,6 +28,13 @@ const RECORDING_FRAME_INTERVAL_MS = 1000 / RECORDING_RENDER_FPS;
 type CompositeVisualSource = 'excalidraw' | 'display';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const getTeleprompterPixelsPerSecond = (speedLevel: number) => {
+  const normalized = clamp(speedLevel, 0, 100) / 100;
+  if (normalized <= 0) return 0;
+  // Keep low-speed control smooth while ensuring visible movement once started.
+  const eased = Math.pow(normalized, 1.8);
+  return 2.2 + eased * 34;
+};
 
 const getAdaptiveVisualDefaults = (next: {
   aspectRatio: string;
@@ -126,11 +133,27 @@ function App() {
   const [teleprompterText, setTeleprompterText] = useState('');
   const [teleprompterPosition, setTeleprompterPosition] = useState({ x: window.innerWidth - 360, y: 80 });
   const [isTeleprompterDragging, setIsTeleprompterDragging] = useState(false);
+  const [isTeleprompterResizing, setIsTeleprompterResizing] = useState(false);
+  const [teleprompterSize, setTeleprompterSize] = useState({
+    width: 340,
+    height: Math.max(180, Math.min(420, window.innerHeight - 120)),
+  });
+  const [teleprompterAutoScroll, setTeleprompterAutoScroll] = useState(false);
+  const [teleprompterSpeedLevel, setTeleprompterSpeedLevel] = useState(34); // 0-100 UI level
+  const [teleprompterOpacity, setTeleprompterOpacity] = useState(0.92);
+  const [teleprompterProgress, setTeleprompterProgress] = useState(0);
+  const [teleprompterScrollMetrics, setTeleprompterScrollMetrics] = useState({
+    scrollTop: 0,
+    maxScrollTop: 0,
+    clientHeight: 0,
+  });
 
   // Refs
   const excalidrawApiRef = useRef<unknown>(null);
   const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
   const teleprompterRef = useRef<HTMLDivElement | null>(null);
+  const teleprompterTextRef = useRef<HTMLTextAreaElement | null>(null);
+  const teleprompterScrollCarryRef = useRef(0);
   const cursorIndicatorRef = useRef<HTMLDivElement | null>(null);
   const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -1780,6 +1803,237 @@ function App() {
     window.addEventListener('mouseup', handleMouseUp);
   }, [teleprompterPosition]);
 
+  const handleTeleprompterResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const teleprompterRect = teleprompterRef.current?.getBoundingClientRect();
+    const startWidth = teleprompterRect?.width ?? teleprompterSize.width;
+    const startHeight = teleprompterRect?.height ?? teleprompterSize.height;
+
+    setIsTeleprompterResizing(true);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      const maxWidth = Math.min(720, window.innerWidth - teleprompterPosition.x - 10);
+      const maxHeight = Math.min(window.innerHeight - 10, window.innerHeight - teleprompterPosition.y - 10);
+      const nextWidth = clamp(startWidth + deltaX, 260, Math.max(260, maxWidth));
+      const nextHeight = clamp(startHeight + deltaY, 180, Math.max(180, maxHeight));
+
+      setTeleprompterSize({
+        width: Math.round(nextWidth),
+        height: Math.round(nextHeight),
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsTeleprompterResizing(false);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }, [teleprompterPosition, teleprompterSize.height, teleprompterSize.width]);
+
+  const updateTeleprompterProgress = useCallback((textarea: HTMLTextAreaElement | null) => {
+    if (!textarea) {
+      setTeleprompterProgress(0);
+      setTeleprompterScrollMetrics({
+        scrollTop: 0,
+        maxScrollTop: 0,
+        clientHeight: 0,
+      });
+      return;
+    }
+
+    const maxScrollTop = Math.max(0, textarea.scrollHeight - textarea.clientHeight);
+    const scrollTop = clamp(textarea.scrollTop, 0, maxScrollTop);
+    const nextProgress = maxScrollTop > 0
+      ? Math.round((scrollTop / maxScrollTop) * 100)
+      : (textarea.value.trim().length > 0 ? 100 : 0);
+
+    setTeleprompterProgress((prev) => (prev === nextProgress ? prev : nextProgress));
+    setTeleprompterScrollMetrics((prev) => {
+      if (
+        prev.scrollTop === scrollTop &&
+        prev.maxScrollTop === maxScrollTop &&
+        prev.clientHeight === textarea.clientHeight
+      ) {
+        return prev;
+      }
+      return {
+        scrollTop,
+        maxScrollTop,
+        clientHeight: textarea.clientHeight,
+      };
+    });
+  }, []);
+
+  const handleTeleprompterScrollbarTrackMouseDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.teleprompter-scroll-thumb')) return;
+
+    const textarea = teleprompterTextRef.current;
+    const track = e.currentTarget as HTMLDivElement;
+    if (!textarea) return;
+
+    const rect = track.getBoundingClientRect();
+    const maxScrollTop = Math.max(0, textarea.scrollHeight - textarea.clientHeight);
+    if (maxScrollTop <= 0) return;
+
+    const thumbHeight = clamp(
+      (textarea.clientHeight * textarea.clientHeight) / (textarea.clientHeight + maxScrollTop),
+      // 34,
+      20,
+      textarea.clientHeight,
+    );
+    const thumbTravel = Math.max(1, textarea.clientHeight - thumbHeight);
+    const clickY = clamp(e.clientY - rect.top - (thumbHeight / 2), 0, thumbTravel);
+    const nextScrollTop = (clickY / thumbTravel) * maxScrollTop;
+
+    textarea.scrollTop = nextScrollTop;
+    updateTeleprompterProgress(textarea);
+  }, [updateTeleprompterProgress]);
+
+  const handleTeleprompterScrollbarThumbMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const textarea = teleprompterTextRef.current;
+    if (!textarea) return;
+
+    const startY = e.clientY;
+    const startScrollTop = textarea.scrollTop;
+    const maxScrollTop = Math.max(0, textarea.scrollHeight - textarea.clientHeight);
+    if (maxScrollTop <= 0) return;
+
+    const thumbHeight = clamp(
+      (textarea.clientHeight * textarea.clientHeight) / (textarea.clientHeight + maxScrollTop),
+      34,
+      textarea.clientHeight,
+    );
+    const thumbTravel = Math.max(1, textarea.clientHeight - thumbHeight);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY;
+      const nextScrollTop = clamp(startScrollTop + ((deltaY / thumbTravel) * maxScrollTop), 0, maxScrollTop);
+      textarea.scrollTop = nextScrollTop;
+      updateTeleprompterProgress(textarea);
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }, [updateTeleprompterProgress]);
+
+  useEffect(() => {
+    if (!showTeleprompter || !teleprompterAutoScroll) return;
+
+    let rafId = 0;
+    let lastTs = performance.now();
+    const scrollPixelsPerSecond = getTeleprompterPixelsPerSecond(teleprompterSpeedLevel);
+    teleprompterScrollCarryRef.current = 0;
+
+    const step = (ts: number) => {
+      const textarea = teleprompterTextRef.current;
+      if (!textarea) {
+        setTeleprompterAutoScroll(false);
+        return;
+      }
+
+      const deltaSeconds = Math.min(0.05, Math.max(0, (ts - lastTs) / 1000));
+      lastTs = ts;
+      if (scrollPixelsPerSecond > 0) {
+        const exactStep = (scrollPixelsPerSecond * deltaSeconds) + teleprompterScrollCarryRef.current;
+        const wholePixels = Math.floor(exactStep);
+        teleprompterScrollCarryRef.current = exactStep - wholePixels;
+        if (wholePixels > 0) {
+          textarea.scrollTop += wholePixels;
+        }
+      } else {
+        teleprompterScrollCarryRef.current = 0;
+      }
+
+      const maxScrollTop = Math.max(0, textarea.scrollHeight - textarea.clientHeight);
+      if (textarea.scrollTop >= maxScrollTop) {
+        textarea.scrollTop = maxScrollTop;
+        updateTeleprompterProgress(textarea);
+        setTeleprompterAutoScroll(false);
+        return;
+      }
+
+      updateTeleprompterProgress(textarea);
+      rafId = requestAnimationFrame(step);
+    };
+
+    rafId = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(rafId);
+      teleprompterScrollCarryRef.current = 0;
+    };
+  }, [showTeleprompter, teleprompterAutoScroll, teleprompterSpeedLevel, updateTeleprompterProgress]);
+
+  useEffect(() => {
+    if (!showTeleprompter) {
+      setTeleprompterProgress(0);
+      setTeleprompterScrollMetrics({
+        scrollTop: 0,
+        maxScrollTop: 0,
+        clientHeight: 0,
+      });
+      return;
+    }
+
+    const rafId = requestAnimationFrame(() => {
+      updateTeleprompterProgress(teleprompterTextRef.current);
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [showTeleprompter, teleprompterText, teleprompterSize.height, teleprompterSize.width, updateTeleprompterProgress]);
+
+  const teleprompterSurfaceAlpha = clamp(teleprompterOpacity, 0, 1);
+  const teleprompterTextAlpha = clamp(0.48 + teleprompterSurfaceAlpha * 0.32, 0.48, 1);
+  const teleprompterChromeAlpha = clamp(0.03 + teleprompterSurfaceAlpha * 0.8, 0.08, 1);
+  const teleprompterScrollbarTrackAlpha = clamp(0.04 + teleprompterSurfaceAlpha * 0.26, 0.04, 0.3);
+  const teleprompterScrollbarThumbAlpha = clamp(0.18 + teleprompterSurfaceAlpha * 0.7, 0.18, 0.88);
+  const teleprompterShadowBoost = isTeleprompterDragging ? 1.35 : isTeleprompterResizing ? 1.2 : 1;
+  const teleprompterBoxShadow = teleprompterSurfaceAlpha <= 0.01
+    ? 'none'
+    : [
+      `0 1px 2px rgba(0, 0, 0, ${0.04 * teleprompterSurfaceAlpha * teleprompterShadowBoost})`,
+      `0 ${Math.round(8 * teleprompterShadowBoost)}px ${Math.round(24 * teleprompterShadowBoost)}px rgba(0, 0, 0, ${0.10 * teleprompterSurfaceAlpha * teleprompterShadowBoost})`,
+      `0 ${Math.round(16 * teleprompterShadowBoost)}px ${Math.round(48 * teleprompterShadowBoost)}px rgba(0, 0, 0, ${0.08 * teleprompterSurfaceAlpha * teleprompterShadowBoost})`,
+      ...(isTeleprompterResizing ? [`0 0 0 1px rgba(68, 64, 60, ${0.25 * teleprompterSurfaceAlpha})`] : []),
+    ].join(', ');
+  const teleprompterThumbHeight = teleprompterScrollMetrics.maxScrollTop > 0
+    ? clamp(
+      (teleprompterScrollMetrics.clientHeight * teleprompterScrollMetrics.clientHeight) /
+      (teleprompterScrollMetrics.clientHeight + teleprompterScrollMetrics.maxScrollTop),
+      34,
+      Math.max(34, teleprompterScrollMetrics.clientHeight),
+    )
+    : Math.max(34, teleprompterScrollMetrics.clientHeight || 34);
+  const teleprompterThumbTravel = Math.max(0, teleprompterScrollMetrics.clientHeight - teleprompterThumbHeight);
+  const teleprompterThumbTop = teleprompterScrollMetrics.maxScrollTop > 0
+    ? (clamp(teleprompterScrollMetrics.scrollTop, 0, teleprompterScrollMetrics.maxScrollTop) / teleprompterScrollMetrics.maxScrollTop) * teleprompterThumbTravel
+    : 0;
+  const teleprompterTextStyle = {
+    color: 'var(--tp-body-text-color)',
+  } as CSSProperties;
+  const teleprompterTextAreaStyle = {
+    '--tp-scrollbar-track-alpha': `${teleprompterScrollbarTrackAlpha}`,
+    '--tp-scrollbar-thumb-alpha': `${teleprompterScrollbarThumbAlpha}`,
+    '--tp-text-alpha': `${teleprompterTextAlpha}`,
+    '--tp-body-text-color': `rgba(28, 25, 23, ${teleprompterTextAlpha})`,
+  } as CSSProperties;
+
   return (
     <div className="app-container">
       <WelcomeModal />
@@ -1807,6 +2061,9 @@ function App() {
           const newState = !showTeleprompter;
           setShowTeleprompter(newState);
           trackTeleprompterUsed(newState ? 'opened' : 'closed');
+          if (!newState) {
+            setTeleprompterAutoScroll(false);
+          }
           if (newState && isRecording) {
             usedTeleprompterRef.current = true;
           }
@@ -1928,32 +2185,123 @@ function App() {
         {showTeleprompter && (
           <div
             ref={teleprompterRef}
-            className={`teleprompter ${isTeleprompterDragging ? 'dragging' : ''}`}
+            className={`teleprompter ${isTeleprompterDragging ? 'dragging' : ''} ${isTeleprompterResizing ? 'resizing' : ''}`}
             style={{
               left: teleprompterPosition.x,
               top: teleprompterPosition.y,
+              width: teleprompterSize.width,
+              height: teleprompterSize.height,
+              background: `rgba(254, 252, 249, ${teleprompterSurfaceAlpha})`,
+              borderColor: `rgba(0, 0, 0, ${0.06 * teleprompterSurfaceAlpha})`,
+              boxShadow: teleprompterBoxShadow,
               cursor: 'default',
             }}
           >
             <div
               className="teleprompter-header"
-              style={{ cursor: isTeleprompterDragging ? 'grabbing' : 'grab' }}
+              style={{
+                cursor: isTeleprompterDragging ? 'grabbing' : 'grab',
+                background: `rgba(250, 250, 249, ${Math.min(1, teleprompterSurfaceAlpha + 0.06)})`,
+                borderBottomColor: `rgba(231, 229, 228, ${teleprompterSurfaceAlpha})`,
+                color: `rgba(68, 64, 60, ${teleprompterChromeAlpha})`,
+              }}
               onMouseDown={handleTeleprompterDrag}
             >
               <span>📜 Teleprompter</span>
               <button
                 className="teleprompter-close"
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => setShowTeleprompter(false)}
+                style={{ color: `rgba(120, 113, 108, ${teleprompterChromeAlpha})` }}
+                onClick={() => {
+                  setShowTeleprompter(false);
+                  setTeleprompterAutoScroll(false);
+                  trackTeleprompterUsed('closed');
+                }}
               >
                 ×
               </button>
             </div>
-            <textarea
-              className="teleprompter-text"
-              value={teleprompterText}
-              onChange={(e) => setTeleprompterText(e.target.value)}
-              placeholder="Paste your script here...&#10;&#10;This text is only visible to you and will NOT appear in the recording."
+            <div
+              className="teleprompter-controls"
+              style={{
+                background: `rgba(245, 245, 244, ${0.82 * teleprompterSurfaceAlpha})`,
+                borderBottomColor: `rgba(231, 229, 228, ${teleprompterSurfaceAlpha})`,
+                opacity: teleprompterChromeAlpha,
+              }}
+            >
+              <button
+                className={`teleprompter-play-btn ${teleprompterAutoScroll ? 'active' : ''}`}
+                onClick={() => {
+                  const next = !teleprompterAutoScroll;
+                  setTeleprompterAutoScroll(next);
+                  if (next) {
+                    trackTeleprompterUsed('scrolled');
+                  }
+                }}
+                title={teleprompterAutoScroll ? 'Pause auto-scroll' : 'Start auto-scroll'}
+              >
+                {teleprompterAutoScroll ? '❚❚' : '▶'}
+              </button>
+              <div className="teleprompter-slider-group">
+                <label className="teleprompter-slider-row">
+                  <span>SPEED</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={teleprompterSpeedLevel}
+                    onChange={(e) => setTeleprompterSpeedLevel(parseInt(e.target.value, 10))}
+                  />
+                </label>
+                <label className="teleprompter-slider-row">
+                  <span>OPACITY</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={teleprompterOpacity}
+                    onChange={(e) => setTeleprompterOpacity(parseFloat(e.target.value))}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="teleprompter-text-area" style={teleprompterTextAreaStyle}>
+              <div
+                className="teleprompter-scrollbar"
+                onMouseDown={handleTeleprompterScrollbarTrackMouseDown}
+                role="presentation"
+              >
+                <button
+                  type="button"
+                  className="teleprompter-scroll-thumb"
+                  style={{
+                    height: `${Math.round(teleprompterThumbHeight)}px`,
+                    transform: `translateY(${Math.round(teleprompterThumbTop)}px)`,
+                  }}
+                  onMouseDown={handleTeleprompterScrollbarThumbMouseDown}
+                  title={`${teleprompterProgress}`}
+                >
+                  {teleprompterProgress}
+                </button>
+              </div>
+              <textarea
+                ref={teleprompterTextRef}
+                className="teleprompter-text"
+                style={teleprompterTextStyle}
+                value={teleprompterText}
+                onScroll={() => updateTeleprompterProgress(teleprompterTextRef.current)}
+                onChange={(e) => setTeleprompterText(e.target.value)}
+                placeholder="Paste your script here...&#10;&#10;This text is only visible to you and will NOT appear in the recording."
+              />
+            </div>
+            <button
+              type="button"
+              className="teleprompter-resize-handle"
+              onMouseDown={handleTeleprompterResize}
+              aria-label="Resize teleprompter"
+              title="Drag to resize"
             />
           </div>
         )}
